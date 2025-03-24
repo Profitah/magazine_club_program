@@ -1,9 +1,9 @@
 package com.club.magazine_club_program.DTO;
 
 public class ManagementDTO {
-    private final int id;
-    private boolean isAttendance;
-    private boolean isTask;
+    private final Integer id;
+    private Boolean isAttendance;
+    private Boolean isTask;
     private String name;
 
     public ManagementDTO(int id, boolean isAttendance, boolean isTask) {
