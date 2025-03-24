@@ -64,4 +64,11 @@ public class ManagementController {
             return ResponseEntity.status(404).body(id + ": " + "과제 업데이트 실패");
         }
     }
+
+    // 출석, 과제 랭킹
+    @GetMapping("/ranking")
+    public ResponseEntity<List<String>> getRanking() {
+        List<ManagementDTO> list = managementService.getAllMemberStat();
+        return ResponseEntity.ok(managementService.getRanking(list, memberService));
+    }
 }
