@@ -17,7 +17,7 @@ public class MemberController {
         this.memberService = memberService;
     }
 
-    // 전체 멤버 조회
+    // 전체 멤버 조회 
     @GetMapping
     public ResponseEntity<?> getAllMembers() {
         try {
@@ -28,14 +28,55 @@ public class MemberController {
         }
     }
 
+    // SNS 링크가 있는 멤버만 조회
+    @GetMapping("/with-sns")
+    public ResponseEntity<?> getMembersWithSNS() {
+        try {
+            List<MemberDTO> members = memberService.getMembersWithSNS();
+            return ResponseEntity.ok(members);
+        } catch (Exception e) {
+            return ResponseEntity.ok("SNS 링크가 있는 멤버 조회 실패: " + e.getMessage());
+        }
+    }
+
     // 멤버 추가
     @PostMapping("/addMember")
     public ResponseEntity<?> addMember(@RequestBody MemberDTO memberDTO) {
         try {
             memberService.addMember(memberDTO);
-            return ResponseEntity.ok( memberDTO.getName() + "추가");
+            return ResponseEntity.ok(memberDTO.getName() + " 추가");
         } catch (Exception e) {
             return ResponseEntity.ok("멤버 추가 실패: " + e.getMessage());
+        }
+    }
+
+    // 멤버 SNS 링크 업데이트
+    @PutMapping("/update-sns")
+    public ResponseEntity<?> updateMemberSNS(@RequestBody MemberDTO memberDTO) {
+        try {
+            boolean isUpdated = memberService.updateMemberSNS(memberDTO);
+            if (isUpdated) {
+                return ResponseEntity.ok("SNS 링크 업데이트 성공");
+            } else {
+                return ResponseEntity.ok("SNS 링크 업데이트 실패: 해당 ID를 찾을 수 없음");
+            }
+        } catch (Exception e) {
+            return ResponseEntity.ok("SNS 링크 업데이트 실패: " + e.getMessage());
+        }
+    }
+
+    // 멤버 SNS 링크 삭제
+    @DeleteMapping("/delete-sns/{id}")
+    public ResponseEntity<?> deleteMemberSNS(@PathVariable int id) {
+        try {
+            boolean isDeleted = memberService.deleteMemberSNS(id);
+            if (isDeleted) {
+                return ResponseEntity.ok("SNS 링크 삭제 성공");
+            } else {
+                return ResponseEntity.ok("SNS 링크 삭제 실패: 해당 ID를 찾을 수 없음");
+            }
+        } catch (Exception e) {
+            return ResponseEntity.ok("SNS 링크 삭제 실패: " + e.getMessage());
         }
     }
 
@@ -45,7 +86,7 @@ public class MemberController {
         try {
             boolean isDeleted = memberService.deleteMember(memberDTO.getId());
             if (isDeleted) {
-                return ResponseEntity.ok( memberDTO.getId() + "삭제");
+                return ResponseEntity.ok(memberDTO.getId() + " 삭제");
             } else {
                 return ResponseEntity.ok("멤버 삭제 실패: 해당 ID를 찾을 수 없음");
             }
