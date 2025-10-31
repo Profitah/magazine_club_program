@@ -14,7 +14,7 @@ public class MemberService {
         this.memberInfoMapper = memberInfoMapper;
     }
 
-    // 모든 멤버 조회 (SNS 링크 포함)
+    // 모든 멤버 조회 
     public List<MemberDTO> getAllMembers() {
         return memberInfoMapper.findAll();
     }
