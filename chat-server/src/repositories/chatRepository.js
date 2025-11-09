@@ -2,8 +2,8 @@ const pool = require('../db/pool');
 
 async function saveMessage({ fromUserId, toUserId, fromUserType, toUserType, message }) {
   const [result] = await pool.execute(
-    `INSERT INTO ChatMessage 
-       (from_user_id, to_user_id, from_user_type, to_user_type, message, is_read, created_at) 
+    `INSERT INTO ChatMessage
+       (from_user_id, to_user_id, from_user_type, to_user_type, message, is_read, created_at)
      VALUES (?, ?, ?, ?, ?, 0, NOW())`,
     [fromUserId, toUserId, fromUserType, toUserType, message],
   );
@@ -12,10 +12,10 @@ async function saveMessage({ fromUserId, toUserId, fromUserType, toUserType, mes
 
 async function getUnreadMessageCount(userId, userType) {
   const [rows] = await pool.execute(
-    `SELECT COUNT(*) as count 
-       FROM ChatMessage 
-      WHERE to_user_id = ? 
-        AND to_user_type = ? 
+    `SELECT COUNT(*) AS count
+       FROM ChatMessage
+      WHERE to_user_id = ?
+        AND to_user_type = ?
         AND (is_read = 0 OR is_read IS NULL)`,
     [userId, userType],
   );
@@ -24,12 +24,12 @@ async function getUnreadMessageCount(userId, userType) {
 
 async function markMessagesAsRead(userId, userType, fromUserId, fromUserType) {
   const [result] = await pool.execute(
-    `UPDATE ChatMessage 
-        SET is_read = 1 
-      WHERE to_user_id = ? 
-        AND to_user_type = ? 
-        AND from_user_id = ? 
-        AND from_user_type = ? 
+    `UPDATE ChatMessage
+        SET is_read = 1
+      WHERE to_user_id = ?
+        AND to_user_type = ?
+        AND from_user_id = ?
+        AND from_user_type = ?
         AND (is_read = 0 OR is_read IS NULL)`,
     [userId, userType, fromUserId, fromUserType],
   );
@@ -38,10 +38,10 @@ async function markMessagesAsRead(userId, userType, fromUserId, fromUserType) {
 
 async function markAllMessagesAsRead(userId, userType) {
   const [result] = await pool.execute(
-    `UPDATE ChatMessage 
-        SET is_read = 1 
-      WHERE to_user_id = ? 
-        AND to_user_type = ? 
+    `UPDATE ChatMessage
+        SET is_read = 1
+      WHERE to_user_id = ?
+        AND to_user_type = ?
         AND (is_read = 0 OR is_read IS NULL)`,
     [userId, userType],
   );
@@ -51,23 +51,17 @@ async function markAllMessagesAsRead(userId, userType) {
 async function getChatHistory({ userId, userType, fromUserId, fromUserType }) {
   if (fromUserId && fromUserType) {
     const [rows] = await pool.execute(
-      `SELECT 
+      `SELECT
           cm.id,
-          cm.from_user_id as fromUserId,
-          cm.to_user_id as toUserId,
-          cm.from_user_type as fromUserType,
-          cm.to_user_type as toUserType,
+          cm.from_user_id AS fromUserId,
+          cm.to_user_id AS toUserId,
+          cm.from_user_type AS fromUserType,
+          cm.to_user_type AS toUserType,
           cm.message,
-          cm.created_at as createdAt,
-          cm.is_read as isRead,
-          CASE 
-            WHEN cm.from_user_type = 'admin' THEN a.email
-            WHEN cm.from_user_type = 'user' THEN m.name
-          END as fromUserName,
-          CASE 
-            WHEN cm.to_user_type = 'admin' THEN a2.email
-            WHEN cm.to_user_type = 'user' THEN m2.name
-          END as toUserName
+          cm.created_at AS createdAt,
+          cm.is_read AS isRead,
+          CASE WHEN cm.from_user_type = 'admin' THEN a.email ELSE m.name END AS fromUserName,
+          CASE WHEN cm.to_user_type = 'admin' THEN a2.email ELSE m2.name END AS toUserName
         FROM ChatMessage cm
         LEFT JOIN Admin a ON cm.from_user_type = 'admin' AND cm.from_user_id = a.id
         LEFT JOIN MemberInfo m ON cm.from_user_type = 'user' AND cm.from_user_id = m.id
@@ -82,23 +76,17 @@ async function getChatHistory({ userId, userType, fromUserId, fromUserType }) {
   }
 
   const [rows] = await pool.execute(
-    `SELECT 
+    `SELECT
         cm.id,
-        cm.from_user_id as fromUserId,
-        cm.to_user_id as toUserId,
-        cm.from_user_type as fromUserType,
-        cm.to_user_type as toUserType,
+        cm.from_user_id AS fromUserId,
+        cm.to_user_id AS toUserId,
+        cm.from_user_type AS fromUserType,
+        cm.to_user_type AS toUserType,
         cm.message,
-        cm.created_at as createdAt,
-        cm.is_read as isRead,
-        CASE 
-          WHEN cm.from_user_type = 'admin' THEN a.email
-          WHEN cm.from_user_type = 'user' THEN m.name
-        END as fromUserName,
-        CASE 
-          WHEN cm.to_user_type = 'admin' THEN a2.email
-          WHEN cm.to_user_type = 'user' THEN m2.name
-        END as toUserName
+        cm.created_at AS createdAt,
+        cm.is_read AS isRead,
+        CASE WHEN cm.from_user_type = 'admin' THEN a.email ELSE m.name END AS fromUserName,
+        CASE WHEN cm.to_user_type = 'admin' THEN a2.email ELSE m2.name END AS toUserName
       FROM ChatMessage cm
       LEFT JOIN Admin a ON cm.from_user_type = 'admin' AND cm.from_user_id = a.id
       LEFT JOIN MemberInfo m ON cm.from_user_type = 'user' AND cm.from_user_id = m.id

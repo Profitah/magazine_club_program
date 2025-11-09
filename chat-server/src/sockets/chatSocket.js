@@ -1,6 +1,7 @@
 const { verifyAdminSession } = require('../services/authService');
 const { getAdminById, getMemberById } = require('../services/userService');
 const chatService = require('../services/chatService');
+const { enqueueNotification } = require('../queue/notificationQueue');
 
 function registerChatSocket(io, userSessions) {
   io.on('connection', (socket) => {
@@ -70,7 +71,13 @@ function registerChatSocket(io, userSessions) {
 
     socket.on('chat:send', async (data) => {
       try {
-        const { fromUserId, toUserId, fromUserType, toUserType, message } = data;
+        const {
+          fromUserId,
+          toUserId,
+          fromUserType,
+          toUserType,
+          message,
+        } = data;
 
         if (!fromUserId || !toUserId || !fromUserType || !toUserType || !message) {
           socket.emit('error', { message: '필수 필드가 누락되었습니다.' });
@@ -125,21 +132,26 @@ function registerChatSocket(io, userSessions) {
 
         if (receiverSocketId) {
           io.to(receiverSocketId).emit('chat:message', responseMessage);
-          io.to(receiverSocketId).emit('chat:notification', {
+        } else {
+          console.log(`수신자 오프라인: ${receiverKey}`);
+        }
+
+        await enqueueNotification({
+          receiverKey,
+          event: 'chat:notification',
+          data: {
             title: `${fromUserName}님으로부터 메시지`,
             body: message,
             fromUserId,
             fromUserType,
             fromUserName,
             timestamp: responseMessage.timestamp,
-          });
+          },
+        });
 
-          const unreadResult = await chatService.fetchUnreadCount(toUserId, toUserType);
-          io.to(receiverSocketId).emit('chat:unread-count', { count: unreadResult.count ?? 0 });
-
-          console.log(`메시지 전송: ${fromUserType}:${fromUserId} -> ${toUserType}:${toUserId}`);
-        } else {
-          console.log(`수신자 오프라인: ${receiverKey}`);
+        const unreadForReceiver = await chatService.fetchUnreadCount(toUserId, toUserType);
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit('chat:unread-count', { count: unreadForReceiver.count ?? 0 });
         }
 
         socket.emit('chat:message', responseMessage);
@@ -170,10 +182,7 @@ function registerChatSocket(io, userSessions) {
           return;
         }
 
-        const messages = historyResult.messages;
-
-        console.log('✅ 채팅 내역 조회 성공');
-        socket.emit('chat:history', messages);
+        socket.emit('chat:history', historyResult.messages);
 
         if (fromUserId && fromUserType) {
           await chatService.markConversationAsRead(userId, userType, fromUserId, fromUserType);
