@@ -47,3 +47,6 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
+server.listen(env.app.port, () => {
+  console.log(`채팅 서버가 포트 ${env.app.port}에서 실행 중입니다.`);
+});
