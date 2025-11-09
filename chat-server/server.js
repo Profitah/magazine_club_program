@@ -5,6 +5,7 @@ const mysql = require('mysql2/promise');
 const cors = require('cors');
 const path = require('path');
 const axios = require('axios');
+const Redis = require('ioredis');
 require('dotenv').config();
 
 const app = express();
@@ -19,6 +20,15 @@ const io = socketIo(server, {
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
+
+const redisUrl = process.env.REDIS_URL
+  || `redis://${process.env.REDIS_HOST || '127.0.0.1'}:${process.env.REDIS_PORT || 6379}`;
+const redisPublisher = new Redis(redisUrl);
+const redisWorker = new Redis(redisUrl);
+const NOTIFICATION_QUEUE = process.env.REDIS_NOTIFICATION_QUEUE || 'chat:notification-queue';
+
+redisPublisher.on('error', (err) => console.error('Redis publisher error:', err));
+redisWorker.on('error', (err) => console.error('Redis worker error:', err));
 
 // MySQL 연결 풀 생성
 const pool = mysql.createPool({
@@ -117,6 +127,61 @@ async function saveMessage(messageData) {
     console.error('메시지 저장 실패:', error);
     throw error;
   }
+}
+
+async function enqueueNotification(job) {
+  try {
+    await redisPublisher.rpush(NOTIFICATION_QUEUE, JSON.stringify(job));
+  } catch (error) {
+    console.error('알림 큐 적재 실패:', error);
+  }
+}
+
+async function startNotificationWorker() {
+  console.log(`📬 Redis 알림 워커 시작 (queue = ${NOTIFICATION_QUEUE})`);
+  while (true) {
+    try {
+      const result = await redisWorker.brpop(NOTIFICATION_QUEUE, 0);
+      if (!result || result.length < 2) {
+        continue;
+      }
+      const rawJob = result[1];
+      let job;
+      try {
+        job = JSON.parse(rawJob);
+      } catch (parseError) {
+        console.error('알림 작업 파싱 실패:', parseError, rawJob);
+        continue;
+      }
+      await processNotificationJob(job);
+    } catch (workerError) {
+      console.error('알림 워커 오류:', workerError);
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+  }
+}
+
+async function processNotificationJob(job) {
+  const {
+    receiverKey,
+    event = 'chat:notification',
+    data,
+  } = job;
+
+  if (!receiverKey || !data) {
+    console.warn('알림 작업 누락 필드:', job);
+    return;
+  }
+
+  const receiverSocketId = userSessions.get(receiverKey);
+
+  if (!receiverSocketId) {
+    console.log(`알림 수신자 오프라인: ${receiverKey}`);
+    return;
+  }
+
+  io.to(receiverSocketId).emit(event, data);
+  console.log(`알림 전송 완료 -> ${receiverKey} (${event})`);
 }
 
 // WebSocket 연결 처리
@@ -255,6 +320,19 @@ io.on('connection', (socket) => {
         console.log(`수신자 오프라인: ${receiverKey}`);
       }
 
+      await enqueueNotification({
+        receiverKey,
+        event: 'chat:notification',
+        data: {
+          title: `${fromUserName}님으로부터 메시지`,
+          body: message,
+          fromUserId,
+          fromUserType,
+          fromUserName,
+          timestamp: responseMessage.timestamp
+        }
+      });
+
       // 발신자에게도 확인 메시지 전송
       socket.emit('chat:message', responseMessage);
 
@@ -370,5 +448,15 @@ app.get('/api/chat/history', async (req, res) => {
 const PORT = process.env.CHAT_PORT || 3001;
 server.listen(PORT, () => {
   console.log(`채팅 서버가 포트 ${PORT}에서 실행 중입니다.`);
+});
+
+startNotificationWorker().catch((error) => {
+  console.error('Failed to start notification worker:', error);
+});
+
+process.on('SIGINT', async () => {
+  console.log('Shutting down Redis connections...');
+  await Promise.allSettled([redisPublisher.quit(), redisWorker.quit()]);
+  process.exit(0);
 });
 
