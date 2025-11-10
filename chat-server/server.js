@@ -7,12 +7,14 @@ const path = require('path');
 const env = require('./src/config/env');
 const chatRoutes = require('./src/routes/chatRoutes');
 const reminderRoutes = require('./src/routes/reminderRoutes');
+const messageReservationRoutes = require('./src/routes/messageReservationRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
 const { registerChatSocket } = require('./src/sockets/chatSocket');
 const { startNotificationWorker, closeQueueConnections } = require('./src/queue/notificationQueue');
 const { startSchedulerWorker, stopSchedulerWorker } = require('./src/queue/schedulerWorker');
 const { closeSchedulerConnection } = require('./src/queue/schedulerQueue');
 const notificationMonitor = require('./src/queue/notificationMonitor');
+const { dispatchReservedMessage } = require('./src/services/messageReservationService');
 
 const app = express();
 const server = http.createServer(app);
@@ -30,6 +32,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/chat', chatRoutes);
 app.use('/api/reminders', reminderRoutes);
+app.use('/api/messages', messageReservationRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 registerChatSocket(io, userSessions);
@@ -52,7 +55,11 @@ startNotificationWorker(async (job) => {
   }
 });
 
-startSchedulerWorker();
+startSchedulerWorker({
+  async onReservedMessage(job) {
+    await dispatchReservedMessage(job, io, userSessions);
+  },
+});
 
 process.on('SIGINT', async () => {
   console.log('Shutting down Redis connections...');

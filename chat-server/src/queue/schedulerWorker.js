@@ -1,10 +1,44 @@
 const env = require('../config/env');
-const { fetchDueJobs } = require('./schedulerQueue');
+const { fetchDueJobs, peekNextScheduledTimestamp } = require('./schedulerQueue');
 const { enqueueNotification } = require('./notificationQueue');
 
 let pollingTimer = null;
+let currentHandlers = null;
+let isRunning = false;
 
-async function processScheduledJobs() {
+const defaultHandlers = {
+  async onNotification(job) {
+    if (!Array.isArray(job.recipients)) {
+      return;
+    }
+
+    const enqueuePromises = [];
+
+    job.recipients.forEach((recipient) => {
+      if (!recipient || !recipient.userId || !recipient.userType) {
+        return;
+      }
+      const receiverKey = `${recipient.userType}:${recipient.userId}`;
+      enqueuePromises.push(
+        enqueueNotification({
+          receiverKey,
+          event: job.event || 'chat:notification',
+          data: {
+            title: job.title,
+            body: job.body,
+            type: job.type,
+            metadata: job.metadata || {},
+            scheduledAt: job.scheduledAt,
+          },
+        })
+      );
+    });
+
+    await Promise.allSettled(enqueuePromises);
+  },
+};
+
+async function processScheduledJobs(handlers) {
   const now = Math.floor(Date.now() / 1000);
 
   try {
@@ -14,54 +48,101 @@ async function processScheduledJobs() {
       return;
     }
 
-    const enqueuePromises = [];
+    const tasks = jobs.map(async (job) => {
+      const jobType = job.type || 'SCHEDULED_NOTIFICATION';
 
-    jobs.forEach((job) => {
-      job.recipients.forEach((recipient) => {
-        const receiverKey = `${recipient.userType}:${recipient.userId}`;
-        enqueuePromises.push(
-          enqueueNotification({
-            receiverKey,
-            event: 'chat:notification',
-            data: {
-              title: job.title,
-              body: job.body,
-              type: job.type,
-              metadata: job.metadata || {},
-              scheduledAt: job.scheduledAt,
-            },
-          })
-        );
-      });
+      if (jobType === 'RESERVED_MESSAGE') {
+        if (handlers.onReservedMessage) {
+          await handlers.onReservedMessage(job);
+        } else {
+          console.warn('예약 메시지 작업 처리기가 없습니다.');
+        }
+        return;
+      }
+
+      await handlers.onNotification(job);
     });
 
-    await Promise.allSettled(enqueuePromises);
+    await Promise.allSettled(tasks);
   } catch (error) {
     console.error('예약 알림 처리 중 오류:', error);
   }
 }
 
-function startSchedulerWorker() {
+async function scheduleNextTick() {
+  if (!currentHandlers) {
+    return;
+  }
+
+  if (pollingTimer) {
+    clearTimeout(pollingTimer);
+  }
+
+  const defaultIntervalMs = env.redis.schedulerIntervalMs;
+  let delayMs = defaultIntervalMs;
+
+  try {
+    const nextTimestamp = await peekNextScheduledTimestamp();
+
+    if (typeof nextTimestamp === 'number') {
+      const nowMs = Date.now();
+      const targetMs = nextTimestamp * 1000;
+      const diff = targetMs - nowMs;
+
+      if (diff <= 0) {
+        delayMs = 0;
+      } else {
+        delayMs = Math.min(defaultIntervalMs, diff);
+      }
+    }
+  } catch (error) {
+    console.error('예약 알림 다음 실행 시점 계산 실패:', error);
+  }
+
+  pollingTimer = setTimeout(runSchedulerLoop, delayMs);
+}
+
+async function runSchedulerLoop() {
+  if (!currentHandlers || isRunning) {
+    await scheduleNextTick();
+    return;
+  }
+
+  isRunning = true;
+
+  try {
+    await processScheduledJobs(currentHandlers);
+  } catch (error) {
+    console.error('예약 알림 워커 실행 중 오류:', error);
+  } finally {
+    isRunning = false;
+    await scheduleNextTick();
+  }
+}
+
+function startSchedulerWorker(handlers = {}) {
   if (pollingTimer) {
     return;
   }
 
-  const interval = env.redis.schedulerIntervalMs;
+  currentHandlers = {
+    ...defaultHandlers,
+    ...handlers,
+  };
 
-  pollingTimer = setInterval(() => {
-    processScheduledJobs().catch((error) => {
-      console.error('예약 알림 워커 실패:', error);
-    });
-  }, interval);
-
-  console.log(`⏰ 예약 알림 워커 시작 (interval = ${interval}ms)`);
+  console.log('⏰ 예약 알림 워커 시작 (동적 폴링 모드)');
+  runSchedulerLoop().catch((error) => {
+    console.error('예약 알림 워커 초기 실행 실패:', error);
+  });
 }
 
 function stopSchedulerWorker() {
   if (pollingTimer) {
-    clearInterval(pollingTimer);
+    clearTimeout(pollingTimer);
     pollingTimer = null;
   }
+  currentHandlers = null;
+  isRunning = false;
 }
 
 module.exports = {

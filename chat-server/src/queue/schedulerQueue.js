@@ -15,27 +15,50 @@ async function enqueueScheduledJob(job) {
   await schedulerClient.zadd(scheduleSetKey, job.scheduledAt, payload);
 }
 
-async function fetchDueJobs(cutoffTimestamp) {
-  const items = await schedulerClient.zrangebyscore(scheduleSetKey, 0, cutoffTimestamp);
+async function fetchDueJobs(cutoffTimestamp, batchSize = 50) {
+  const jobs = [];
 
-  if (items.length === 0) {
-    return [];
+  while (jobs.length < batchSize) {
+    const result = await schedulerClient.zpopmin(scheduleSetKey, 1);
+
+    if (!result || result.length === 0) {
+      break;
+    }
+
+    const [rawJob, score] = result;
+    const scheduledAt = Number(score);
+
+    if (!Number.isFinite(scheduledAt)) {
+      console.error('예약 작업 스코어가 숫자가 아닙니다:', score);
+      continue;
+    }
+
+    if (scheduledAt > cutoffTimestamp) {
+      await schedulerClient.zadd(scheduleSetKey, scheduledAt, rawJob);
+      break;
+    }
+
+    try {
+      const parsedJob = JSON.parse(rawJob);
+      jobs.push(parsedJob);
+    } catch (error) {
+      console.error('예약 작업 파싱 실패:', error, rawJob);
+    }
   }
 
-  const pipeline = schedulerClient.pipeline();
-  items.forEach((item) => {
-    pipeline.zrem(scheduleSetKey, item);
-  });
-  await pipeline.exec();
+  return jobs;
+}
 
-  return items.map((item) => {
-    try {
-      return JSON.parse(item);
-    } catch (error) {
-      console.error('예약 작업 파싱 실패:', error, item);
-      return null;
-    }
-  }).filter(Boolean);
+async function peekNextScheduledTimestamp() {
+  const result = await schedulerClient.zrange(scheduleSetKey, 0, 0, 'WITHSCORES');
+
+  if (!result || result.length < 2) {
+    return null;
+  }
+
+  const score = Number(result[1]);
+
+  return Number.isFinite(score) ? score : null;
 }
 
 async function closeSchedulerConnection() {
@@ -45,5 +68,6 @@ async function closeSchedulerConnection() {
 module.exports = {
   enqueueScheduledJob,
   fetchDueJobs,
+  peekNextScheduledTimestamp,
   closeSchedulerConnection,
 };
