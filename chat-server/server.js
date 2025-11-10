@@ -7,10 +7,12 @@ const path = require('path');
 const env = require('./src/config/env');
 const chatRoutes = require('./src/routes/chatRoutes');
 const reminderRoutes = require('./src/routes/reminderRoutes');
+const notificationRoutes = require('./src/routes/notificationRoutes');
 const { registerChatSocket } = require('./src/sockets/chatSocket');
 const { startNotificationWorker, closeQueueConnections } = require('./src/queue/notificationQueue');
 const { startSchedulerWorker, stopSchedulerWorker } = require('./src/queue/schedulerWorker');
 const { closeSchedulerConnection } = require('./src/queue/schedulerQueue');
+const notificationMonitor = require('./src/queue/notificationMonitor');
 
 const app = express();
 const server = http.createServer(app);
@@ -28,17 +30,26 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/chat', chatRoutes);
 app.use('/api/reminders', reminderRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 registerChatSocket(io, userSessions);
 
-startNotificationWorker(({ receiverKey, event = 'chat:notification', data }) => {
-  const socketId = userSessions.get(receiverKey);
-  if (!socketId) {
-    console.log(`알림 수신자 오프라인: ${receiverKey}`);
-    return;
+startNotificationWorker(async (job) => {
+  try {
+    const socketId = userSessions.get(job.receiverKey);
+    if (!socketId) {
+      console.log(`알림 수신자 오프라인: ${job.receiverKey}`);
+      await notificationMonitor.recordFailure(job, 'receiver_offline');
+      return;
+    }
+
+    io.to(socketId).emit(job.event, job.data);
+    console.log(`알림 전송 완료 -> ${job.receiverKey} (${job.event})`);
+    await notificationMonitor.recordDelivered(job);
+  } catch (error) {
+    console.error('알림 전송 실패:', error);
+    await notificationMonitor.recordFailure(job, error.message || 'deliver_failed');
   }
-  io.to(socketId).emit(event, data);
-  console.log(`알림 전송 완료 -> ${receiverKey} (${event})`);
 });
 
 startSchedulerWorker();
@@ -48,6 +59,7 @@ process.on('SIGINT', async () => {
   stopSchedulerWorker();
   await closeQueueConnections();
   await closeSchedulerConnection();
+  await notificationMonitor.closeMonitorConnections();
   process.exit(0);
 });
 

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.Collections;
 import java.util.Map;
 
 @Service
@@ -34,6 +35,33 @@ public class ChatNotificationService {
     public ChatNotificationResponse scheduleNotification(NotificationScheduleRequest request) {
         String url = chatServerBaseUrl + "/api/reminders/schedule";
         return postForNotification(url, request);
+    }
+
+    public Map<String, Object> fetchNotificationLogs(int limit) {
+        String url = chatServerBaseUrl + "/api/notifications/logs?limit=" + limit;
+        return getForNotification(url);
+    }
+
+    public Map<String, Object> fetchFailedNotifications() {
+        String url = chatServerBaseUrl + "/api/notifications/failed";
+        return getForNotification(url);
+    }
+
+    public ChatNotificationResponse retryNotification(String jobId) {
+        String url = chatServerBaseUrl + "/api/notifications/retry";
+        return postForNotification(url, Collections.singletonMap("jobId", jobId));
+    }
+
+    private Map<String, Object> getForNotification(String url) {
+        try {
+            ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
+            return response.getBody();
+        } catch (HttpStatusCodeException ex) {
+            return Map.of(
+                    "success", false,
+                    "message", ex.getResponseBodyAsString()
+            );
+        }
     }
 
     private ChatNotificationResponse postForNotification(String url, Object payload) {

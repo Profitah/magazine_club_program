@@ -38,6 +38,9 @@ const env = {
     queue: process.env.REDIS_NOTIFICATION_QUEUE || 'chat:notification-queue',
     scheduleSet: process.env.REDIS_SCHEDULE_SET || 'chat:scheduled-notifications',
     schedulerIntervalMs: toNumber(process.env.REDIS_SCHEDULER_INTERVAL_MS, 1000),
+    logList: process.env.REDIS_NOTIFICATION_LOG_LIST || 'chat:notification-logs',
+    logRetention: toNumber(process.env.REDIS_NOTIFICATION_LOG_RETENTION, 200),
+    deadLetter: process.env.REDIS_NOTIFICATION_DEAD_LETTER || 'chat:notification-dead-letter',
   },
 };
 

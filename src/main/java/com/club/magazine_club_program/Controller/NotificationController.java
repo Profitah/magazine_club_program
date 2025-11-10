@@ -34,4 +34,32 @@ public class NotificationController {
         HttpStatus status = response.isSuccess() ? HttpStatus.ACCEPTED : HttpStatus.BAD_REQUEST;
         return ResponseEntity.status(status).body(response);
     }
+
+    @GetMapping("/logs")
+    public ResponseEntity<?> getNotificationLogs(@RequestParam(defaultValue = "100") int limit) {
+        Map<String, Object> response = chatNotificationService.fetchNotificationLogs(limit);
+        boolean success = Boolean.TRUE.equals(response.get("success"));
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(response);
+    }
+
+    @GetMapping("/failed")
+    public ResponseEntity<?> getFailedNotifications() {
+        Map<String, Object> response = chatNotificationService.fetchFailedNotifications();
+        boolean success = Boolean.TRUE.equals(response.get("success"));
+        HttpStatus status = success ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(response);
+    }
+
+    @PostMapping("/retry")
+    public ResponseEntity<ChatNotificationResponse> retryFailedNotification(@RequestBody Map<String, String> request) {
+        String jobId = request.get("jobId");
+        if (jobId == null || jobId.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(new ChatNotificationResponse(false, "jobId는 필수입니다.", null));
+        }
+
+        ChatNotificationResponse response = chatNotificationService.retryNotification(jobId);
+        HttpStatus status = response.isSuccess() ? HttpStatus.OK : HttpStatus.BAD_REQUEST;
+        return ResponseEntity.status(status).body(response);
+    }
 }
