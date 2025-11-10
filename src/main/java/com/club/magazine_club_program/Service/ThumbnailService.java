@@ -18,8 +18,8 @@ public class ThumbnailService {
     
     @Autowired
     private RestTemplate restTemplate;
-    
-    private static final String PYTHON_SERVICE_URL = "http://localhost:8000";
+    @Value("${python.service.url}")
+    private String pythonServiceUrl;
     private static final int DEFAULT_PAGE_SIZE = 3;
     
     @Value("${instagram.target.username}")
@@ -34,7 +34,7 @@ public class ThumbnailService {
     public ThumbnailDTO getInstagramThumbnails(String username) {
         try {
             String actualUsername = convertUsername(username);
-            String url = PYTHON_SERVICE_URL + "/instagram/thumbnails/urls/" + actualUsername;
+            String url = pythonServiceUrl + "/instagram/thumbnails/urls/" + actualUsername;
             
             ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
             
@@ -109,7 +109,7 @@ public class ThumbnailService {
      */
     public boolean isPythonServiceHealthy() {
         try {
-            String url = PYTHON_SERVICE_URL + "/health";
+            String url = pythonServiceUrl + "/health";
             ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
             return response.getStatusCode() == HttpStatus.OK;
         } catch (Exception e) {

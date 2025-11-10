@@ -2,6 +2,7 @@ package com.club.magazine_club_program.Service;
 
 import com.club.magazine_club_program.DTO.AssignmentReminderRequest;
 import com.club.magazine_club_program.DTO.ChatNotificationResponse;
+import com.club.magazine_club_program.DTO.MessageReservationRequest;
 import com.club.magazine_club_program.DTO.NotificationScheduleRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -34,6 +35,11 @@ public class ChatNotificationService {
 
     public ChatNotificationResponse scheduleNotification(NotificationScheduleRequest request) {
         String url = chatServerBaseUrl + "/api/reminders/schedule";
+        return postForNotification(url, request);
+    }
+
+    public ChatNotificationResponse reserveMessage(MessageReservationRequest request) {
+        String url = chatServerBaseUrl + "/api/messages/reserve";
         return postForNotification(url, request);
     }
 
