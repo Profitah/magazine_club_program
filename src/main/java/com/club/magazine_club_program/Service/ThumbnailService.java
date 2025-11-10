@@ -25,7 +25,7 @@ public class ThumbnailService {
     @Value("${instagram.target.username}")
     private String targetInstagramUsername;
     
-    @Value("${instagram.source.username:bbolbbol}")
+    @Value("${instagram.source.username}")
     private String sourceInstagramUsername;
     
     /**
