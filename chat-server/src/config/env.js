@@ -36,6 +36,8 @@ const env = {
     host: process.env.REDIS_HOST || '127.0.0.1',
     port: toNumber(process.env.REDIS_PORT, 6379),
     queue: process.env.REDIS_NOTIFICATION_QUEUE || 'chat:notification-queue',
+    scheduleSet: process.env.REDIS_SCHEDULE_SET || 'chat:scheduled-notifications',
+    schedulerIntervalMs: toNumber(process.env.REDIS_SCHEDULER_INTERVAL_MS, 1000),
   },
 };
 

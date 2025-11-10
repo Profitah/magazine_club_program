@@ -9,6 +9,8 @@ const chatRoutes = require('./src/routes/chatRoutes');
 const reminderRoutes = require('./src/routes/reminderRoutes');
 const { registerChatSocket } = require('./src/sockets/chatSocket');
 const { startNotificationWorker, closeQueueConnections } = require('./src/queue/notificationQueue');
+const { startSchedulerWorker, stopSchedulerWorker } = require('./src/queue/schedulerWorker');
+const { closeSchedulerConnection } = require('./src/queue/schedulerQueue');
 
 const app = express();
 const server = http.createServer(app);
@@ -39,9 +41,13 @@ startNotificationWorker(({ receiverKey, event = 'chat:notification', data }) => 
   console.log(`알림 전송 완료 -> ${receiverKey} (${event})`);
 });
 
+startSchedulerWorker();
+
 process.on('SIGINT', async () => {
   console.log('Shutting down Redis connections...');
+  stopSchedulerWorker();
   await closeQueueConnections();
+  await closeSchedulerConnection();
   process.exit(0);
 });
 
