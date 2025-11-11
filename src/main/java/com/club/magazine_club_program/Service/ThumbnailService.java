@@ -18,10 +18,8 @@ public class ThumbnailService {
     
     @Autowired
     private RestTemplate restTemplate;
-    
     @Value("${python.service.url}")
     private String pythonServiceUrl;
-    
     private static final int DEFAULT_PAGE_SIZE = 3;
     
     @Value("${instagram.target.username}")

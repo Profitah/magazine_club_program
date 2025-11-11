@@ -19,6 +19,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(new AntPathRequestMatcher("/admin/setup-authenticator")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/admin/verify-authenticator")).permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/admin/verify-for-chat")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/admin/logout")).permitAll()
                         .anyRequest().permitAll()
                 )
