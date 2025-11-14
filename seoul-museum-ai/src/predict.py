@@ -96,8 +96,11 @@ class MuseumClassifier:
             probs = F.softmax(outputs, dim=1)
             top_probs, top_indices = probs.topk(min(topk, probs.size(1)))
 
+        flat_probs = top_probs.reshape(-1).tolist()
+        flat_indices = top_indices.reshape(-1).tolist()
+
         results: List[Dict[str, float]] = []
-        for prob, idx in zip(top_probs.squeeze().tolist(), top_indices.squeeze().tolist()):
+        for prob, idx in zip(flat_probs, flat_indices):
             label = self.class_names[idx]
             results.append({"label": label, "confidence": float(prob)})
         return results

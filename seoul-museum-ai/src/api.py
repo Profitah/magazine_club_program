@@ -7,13 +7,17 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any, Dict, List
+from functools import partial
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from .ensemble import combine_results, load_keyword_map
 from .predict import ModelNotReadyError, get_classifier, warmup
+from .ocr import extract_text
 
 LOGGER = logging.getLogger(__name__)
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
@@ -21,6 +25,10 @@ logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 MODEL_PATH = os.getenv("MODEL_PATH")
 CLASS_MAP_PATH = os.getenv("CLASS_MAP_PATH")
 DEFAULT_TOPK = int(os.getenv("DEFAULT_TOPK", "3"))
+KEYWORD_PATH = os.getenv("KEYWORD_PATH")
+OCR_MIN_CONFIDENCE = float(os.getenv("OCR_MIN_CONFIDENCE", "0.45"))
+OCR_MIN_MATCH_RATIO = float(os.getenv("OCR_MIN_MATCH_RATIO", "0.3"))
+OCR_WEIGHT = float(os.getenv("OCR_WEIGHT", "0.9"))
 
 app = FastAPI(
     title="Seoul Museum Entrance Classifier",
@@ -47,6 +55,8 @@ async def startup_event() -> None:
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(None, warmup, classifier)
         LOGGER.info("모델 워밍업 완료")
+        load_keyword_map(Path(KEYWORD_PATH) if KEYWORD_PATH else None)
+        LOGGER.info("키워드 사전 로드 완료")
     except ModelNotReadyError as error:
         LOGGER.error("모델 로딩 실패: %s", error)
         raise
@@ -72,7 +82,12 @@ async def health() -> Dict[str, Any]:
     summary="정문 이미지로 미술관 분류",
     response_description="Top-K 예측 결과",
 )
-async def predict(top_k: int = DEFAULT_TOPK, file: UploadFile = File(...)) -> JSONResponse:
+async def predict(
+    top_k: int = DEFAULT_TOPK,
+    include_text: bool = False,
+    include_decision: bool = True,
+    file: UploadFile = File(...),
+) -> JSONResponse:
     """
     Run inference on the uploaded image.
     """
@@ -96,6 +111,23 @@ async def predict(top_k: int = DEFAULT_TOPK, file: UploadFile = File(...)) -> JS
             image_bytes,
             top_k,
         )
+
+        need_ocr = include_text or include_decision
+        ocr_text: List[str] = []
+        if need_ocr:
+            extract_callable = partial(extract_text, image_bytes, OCR_MIN_CONFIDENCE)
+            ocr_text = await loop.run_in_executor(None, extract_callable)
+
+        decision: Optional[Dict[str, Any]] = None
+        if include_decision:
+            keyword_map = load_keyword_map(Path(KEYWORD_PATH) if KEYWORD_PATH else None)
+            decision = combine_results(
+                predictions,
+                ocr_text,
+                keyword_map,
+                min_match_ratio=OCR_MIN_MATCH_RATIO,
+                ocr_weight=OCR_WEIGHT,
+            )
     except ModelNotReadyError as error:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(error)) from error
     except Exception as exc:  # pragma: no cover - defensive logging
@@ -109,6 +141,8 @@ async def predict(top_k: int = DEFAULT_TOPK, file: UploadFile = File(...)) -> JS
                 {"rank": idx + 1, "label": entry["label"], "confidence": entry["confidence"]}
                 for idx, entry in enumerate(predictions)
             ],
+            "ocr_text": ocr_text if include_text else None,
+            "decision": decision,
         }
     )
 
