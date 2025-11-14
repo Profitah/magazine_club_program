@@ -57,25 +57,20 @@ public class OAuth2TokenController {
                 Map<String, Object> tokenInfo = new HashMap<>();
                 tokenInfo.put("principalName", tokenDTO.getPrincipalName());
                 tokenInfo.put("registrationId", tokenDTO.getRegistrationId());
-                tokenInfo.put("accessTokenIssuedAt", tokenDTO.getAccessTokenIssuedAt());
-                tokenInfo.put("accessTokenExpiresAt", tokenDTO.getAccessTokenExpiresAt());
-                tokenInfo.put("accessTokenType", tokenDTO.getAccessTokenType());
                 tokenInfo.put("hasRefreshToken", tokenDTO.getRefreshTokenValue() != null);
                 tokenInfo.put("refreshTokenIssuedAt", tokenDTO.getRefreshTokenIssuedAt());
                 tokenInfo.put("refreshTokenExpiresAt", tokenDTO.getRefreshTokenExpiresAt());
                 
-                // 실제 토큰 값은 보안상 마스킹 처리
-                if (tokenDTO.getAccessTokenValue() != null) {
-                    String maskedToken = maskToken(tokenDTO.getAccessTokenValue());
-                    tokenInfo.put("accessTokenValue", maskedToken);
-                }
+                // Refresh token 값은 보안상 마스킹 처리 (암호화되어 저장됨)
                 if (tokenDTO.getRefreshTokenValue() != null) {
                     String maskedToken = maskToken(tokenDTO.getRefreshTokenValue());
-                    tokenInfo.put("refreshTokenValue", maskedToken);
+                    tokenInfo.put("refreshTokenValue", maskedToken + " (암호화됨)");
                 }
                 
+                tokenInfo.put("note", "Access token은 메모리에만 저장됩니다 (짧은 만료 시간)");
+                
                 response.put("success", true);
-                response.put("message", "토큰 조회 성공");
+                response.put("message", "Refresh token 조회 성공");
                 response.put("token", tokenInfo);
                 response.put("user", Map.of(
                     "kakaoId", kakaoId != null ? kakaoId : "",
@@ -84,15 +79,22 @@ public class OAuth2TokenController {
                 ));
             } else {
                 response.put("success", false);
-                response.put("message", "토큰을 찾을 수 없습니다.");
+                response.put("message", "Refresh token을 찾을 수 없습니다.");
             }
 
-            // OAuth2AuthorizedClient에서도 확인
+            // OAuth2AuthorizedClient에서 Access token 확인 (메모리에 저장됨)
             if (authorizedClient != null) {
                 Map<String, Object> clientInfo = new HashMap<>();
                 clientInfo.put("clientRegistrationId", authorizedClient.getClientRegistration().getRegistrationId());
-                clientInfo.put("accessTokenIssuedAt", authorizedClient.getAccessToken().getIssuedAt());
-                clientInfo.put("accessTokenExpiresAt", authorizedClient.getAccessToken().getExpiresAt());
+                if (authorizedClient.getAccessToken() != null) {
+                    clientInfo.put("accessTokenIssuedAt", authorizedClient.getAccessToken().getIssuedAt());
+                    clientInfo.put("accessTokenExpiresAt", authorizedClient.getAccessToken().getExpiresAt());
+                    clientInfo.put("accessTokenType", authorizedClient.getAccessToken().getTokenType().getValue());
+                    clientInfo.put("hasAccessToken", true);
+                } else {
+                    clientInfo.put("hasAccessToken", false);
+                }
+                clientInfo.put("hasRefreshToken", authorizedClient.getRefreshToken() != null);
                 response.put("oauth2AuthorizedClient", clientInfo);
             }
 

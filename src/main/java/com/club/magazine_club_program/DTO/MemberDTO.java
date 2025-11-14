@@ -3,7 +3,7 @@ package com.club.magazine_club_program.DTO;
 public class MemberDTO {
     private int id;
     private String name;
-    private String snsLink;
+    private String snsLink;        
     private String kakaoId;
     private String email;
 

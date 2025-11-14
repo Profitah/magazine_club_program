@@ -6,21 +6,18 @@ public class OAuth2TokenDTO {
     private Long id;
     private String principalName; // 사용자 식별자 (memberId 또는 kakaoId)
     private String registrationId; // "kakao"
-    private String accessTokenValue;
-    private Instant accessTokenIssuedAt;
-    private Instant accessTokenExpiresAt;
-    private String accessTokenType;
-    private String refreshTokenValue;
+    // Access token은 메모리에만 저장 (짧은 만료 시간)
+    // Refresh token만 DB에 암호화 저장
+    private String refreshTokenValue; // 암호화된 refresh token
     private Instant refreshTokenIssuedAt;
     private Instant refreshTokenExpiresAt;
 
     public OAuth2TokenDTO() {
     }
 
-    public OAuth2TokenDTO(String principalName, String registrationId, String accessTokenValue) {
+    public OAuth2TokenDTO(String principalName, String registrationId) {
         this.principalName = principalName;
         this.registrationId = registrationId;
-        this.accessTokenValue = accessTokenValue;
     }
 
     public Long getId() {
@@ -47,37 +44,6 @@ public class OAuth2TokenDTO {
         this.registrationId = registrationId;
     }
 
-    public String getAccessTokenValue() {
-        return accessTokenValue;
-    }
-
-    public void setAccessTokenValue(String accessTokenValue) {
-        this.accessTokenValue = accessTokenValue;
-    }
-
-    public Instant getAccessTokenIssuedAt() {
-        return accessTokenIssuedAt;
-    }
-
-    public void setAccessTokenIssuedAt(Instant accessTokenIssuedAt) {
-        this.accessTokenIssuedAt = accessTokenIssuedAt;
-    }
-
-    public Instant getAccessTokenExpiresAt() {
-        return accessTokenExpiresAt;
-    }
-
-    public void setAccessTokenExpiresAt(Instant accessTokenExpiresAt) {
-        this.accessTokenExpiresAt = accessTokenExpiresAt;
-    }
-
-    public String getAccessTokenType() {
-        return accessTokenType;
-    }
-
-    public void setAccessTokenType(String accessTokenType) {
-        this.accessTokenType = accessTokenType;
-    }
 
     public String getRefreshTokenValue() {
         return refreshTokenValue;
