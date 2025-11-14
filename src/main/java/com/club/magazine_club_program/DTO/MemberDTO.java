@@ -1,9 +1,13 @@
 package com.club.magazine_club_program.DTO;
 
 public class MemberDTO {
-    private final int id;
+    private int id;
     private String name;
-    private String snsLink;        
+    private String snsLink;
+    private String kakaoId;
+    private String email;
+
+    public MemberDTO() {}
 
     public MemberDTO(int id, String name) {
         this.id = id;
@@ -16,8 +20,18 @@ public class MemberDTO {
         this.snsLink = snsLink;
     }
 
+    public MemberDTO(String name, String kakaoId, String email) {
+        this.name = name;
+        this.kakaoId = kakaoId;
+        this.email = email;
+    }
+
     public int getId() {
         return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
     
     public String getName() {
@@ -34,5 +48,21 @@ public class MemberDTO {
 
     public void setSnsLink(String snsLink) {
         this.snsLink = snsLink;
+    }
+
+    public String getKakaoId() {
+        return kakaoId;
+    }
+
+    public void setKakaoId(String kakaoId) {
+        this.kakaoId = kakaoId;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 }

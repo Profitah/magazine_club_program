@@ -2,12 +2,15 @@ package com.club.magazine_club_program.Service;
 
 import com.club.magazine_club_program.DTO.MemberDTO;
 import com.club.magazine_club_program.Mapper.MemberInfoMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 
 @Service
 public class MemberService {
+    private static final Logger log = LoggerFactory.getLogger(MemberService.class);
     private final MemberInfoMapper memberInfoMapper;
 
     public MemberService(MemberInfoMapper memberInfoMapper) {
@@ -42,5 +45,49 @@ public class MemberService {
     // 멤버 삭제
     public boolean deleteMember(int id) {
         return memberInfoMapper.deleteMember(id) > 0;
+    }
+
+    // 회원 전체 정보 업데이트 (kakaoId, email, snsLink 포함)
+    public boolean updateMember(MemberDTO memberDTO) {
+        return memberInfoMapper.updateMember(memberDTO) > 0;
+    }
+
+    // 카카오 ID로 회원 조회
+    public MemberDTO findByKakaoId(String kakaoId) {
+        return memberInfoMapper.findByKakaoId(kakaoId);
+    }
+
+    // 카카오 로그인 회원 생성 또는 조회 (자동 회원가입)
+    public MemberDTO findOrCreateKakaoMember(String kakaoId, String nickname, String email) {
+        // 기존 회원 조회
+        MemberDTO member = memberInfoMapper.findByKakaoId(kakaoId);
+        
+        if (member != null) {
+            // 기존 회원이면 정보 업데이트 (닉네임, 이메일 변경 가능)
+            boolean needsUpdate = false;
+            if (nickname != null && !nickname.equals(member.getName())) {
+                member.setName(nickname);
+                needsUpdate = true;
+            }
+            if (email != null && !email.equals(member.getEmail())) {
+                member.setEmail(email);
+                needsUpdate = true;
+            }
+            if (needsUpdate) {
+                memberInfoMapper.updateKakaoMember(member);
+                // 업데이트 후 다시 조회하여 최신 정보 반환
+                member = memberInfoMapper.findByKakaoId(kakaoId);
+            }
+            log.info("카카오 기존 회원 로그인: kakaoId={}, name={}", kakaoId, nickname);
+            return member;
+        } else {
+            // 신규 회원 생성
+            MemberDTO newMember = new MemberDTO(nickname, kakaoId, email);
+            newMember.setSnsLink("카카오 로그인");
+            memberInfoMapper.addKakaoMember(newMember);
+            log.info("카카오 신규 회원 가입: kakaoId={}, name={}", kakaoId, nickname);
+            // 생성된 회원 정보 다시 조회 (auto-generated id 포함)
+            return memberInfoMapper.findByKakaoId(kakaoId);
+        }
     }
 }
