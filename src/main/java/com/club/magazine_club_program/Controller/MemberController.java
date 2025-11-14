@@ -98,7 +98,7 @@ public class MemberController {
         }
     }
 
-    // 회원 전체 정보 업데이트 (kakaoId, email, snsLink 포함)
+    // 회원 전체 정보 업데이트 (email, snsLink 포함)
     @PutMapping("/{id}")
     public ResponseEntity<?> updateMember(
             @PathVariable int id,
@@ -117,23 +117,22 @@ public class MemberController {
     }
 
     // 카카오 로그인 후 추가 정보 입력 (배열로 받기) - 구조분해할당용
-    // [kakaoId, email, snsLink] 형태로 받음
+    // [email, snsLink] 형태로 받음
     @PostMapping("/complete-registration/{id}")
     public ResponseEntity<?> completeRegistration(
             @PathVariable int id,
             @RequestBody List<String> additionalInfo) {
         try {
-            // 배열 구조분해할당: [kakaoId, email, snsLink]
-            if (additionalInfo == null || additionalInfo.size() < 3) {
+            
+            if (additionalInfo == null || additionalInfo.size() < 2) {
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("success", false);
-                errorResponse.put("message", "배열 형태로 [kakaoId, email, snsLink]를 전달해주세요");
+                errorResponse.put("message", "배열 형태로 [email, snsLink]를 전달해주세요");
                 return ResponseEntity.ok(errorResponse);
             }
 
-            String kakaoId = additionalInfo.get(0);
-            String email = additionalInfo.get(1);
-            String snsLink = additionalInfo.get(2);
+            String email = additionalInfo.get(0);
+            String snsLink = additionalInfo.get(1);
 
             // 기존 회원 정보 조회
             MemberDTO member = memberService.getAllMembers().stream()
@@ -149,7 +148,6 @@ public class MemberController {
             }
 
             // 구조분해할당으로 받은 값으로 업데이트
-            member.setKakaoId(kakaoId);
             member.setEmail(email);
             member.setSnsLink(snsLink);
 
@@ -185,20 +183,19 @@ public class MemberController {
     @PostMapping("/signup")
     public ResponseEntity<?> signup(@RequestBody List<String> signupInfo) {
         try {
-            // 배열 구조분해할당: [kakaoId, email, snsLink]
-            if (signupInfo == null || signupInfo.size() < 3) {
+            // 배열 구조분해할당: [email, snsLink]
+            if (signupInfo == null || signupInfo.size() < 2) {
                 Map<String, Object> errorResponse = new HashMap<>();
                 errorResponse.put("success", false);
-                errorResponse.put("message", "배열 형태로 [kakaoId, email, snsLink]를 전달해주세요");
+                errorResponse.put("message", "배열 형태로 [email, snsLink]를 전달해주세요");
                 return ResponseEntity.ok(errorResponse);
             }
 
-            String kakaoId = signupInfo.get(0);
-            String email = signupInfo.get(1);
-            String snsLink = signupInfo.get(2);
+            String email = signupInfo.get(0);
+            String snsLink = signupInfo.get(1);
 
-            // 카카오 ID로 회원 조회
-            MemberDTO member = memberService.findByKakaoId(kakaoId);
+            // 이메일로 회원 조회
+            MemberDTO member = memberService.findByEmail(email);
             
             if (member == null) {
                 // 회원이 없으면 생성
@@ -209,7 +206,6 @@ public class MemberController {
             }
 
             // 회원 정보 업데이트
-            member.setKakaoId(kakaoId);
             member.setEmail(email);
             member.setSnsLink(snsLink);
 

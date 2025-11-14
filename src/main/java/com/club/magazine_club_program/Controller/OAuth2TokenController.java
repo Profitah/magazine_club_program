@@ -45,11 +45,10 @@ public class OAuth2TokenController {
             }
 
             String principalName = oauth2User.getName();
-            String kakaoId = oauth2User.getAttribute("id");
             
             // 데이터베이스에서 토큰 조회
             OAuth2TokenDTO tokenDTO = oAuth2TokenMapper.findByPrincipalNameAndRegistrationId(
-                    principalName != null ? principalName : kakaoId, 
+                    principalName,
                     "kakao"
             );
 
@@ -73,7 +72,6 @@ public class OAuth2TokenController {
                 response.put("message", "Refresh token 조회 성공");
                 response.put("token", tokenInfo);
                 response.put("user", Map.of(
-                    "kakaoId", kakaoId != null ? kakaoId : "",
                     "memberId", oauth2User.getAttribute("memberId"),
                     "memberName", oauth2User.getAttribute("memberName")
                 ));

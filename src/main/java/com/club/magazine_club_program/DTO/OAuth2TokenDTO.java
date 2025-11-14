@@ -4,7 +4,7 @@ import java.time.Instant;
 
 public class OAuth2TokenDTO {
     private Long id;
-    private String principalName; // 사용자 식별자 (memberId 또는 kakaoId)
+    private String principalName; // 사용자 식별자 (memberId)
     private String registrationId; // "kakao"
     // Access token은 메모리에만 저장 (짧은 만료 시간)
     // Refresh token만 DB에 암호화 저장

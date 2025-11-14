@@ -34,14 +34,12 @@ public class KakaoLoginController {
         Map<String, Object> response = new HashMap<>();
         
         if (oauth2User != null) {
-            String kakaoId = oauth2User.getAttribute("id");
             String email = oauth2User.getAttribute("email");
             String nickname = oauth2User.getAttribute("nickname");
             Integer memberId = oauth2User.getAttribute("memberId");
             String memberName = oauth2User.getAttribute("memberName");
 
             // 세션에 사용자 정보 저장
-            session.setAttribute("kakaoId", kakaoId);
             session.setAttribute("email", email);
             session.setAttribute("nickname", nickname);
             session.setAttribute("memberId", memberId);
@@ -59,9 +57,8 @@ public class KakaoLoginController {
                         .orElse(null);
                 
                 if (dbMember != null) {
-                    // DB에 저장된 kakaoId나 email이 비어있는지 확인
-                    needsAdditionalInfo = (dbMember.getKakaoId() == null || dbMember.getKakaoId().isEmpty()) ||
-                                         (dbMember.getEmail() == null || dbMember.getEmail().isEmpty());
+                    // DB에 저장된 email이 비어있는지 확인
+                    needsAdditionalInfo = (dbMember.getEmail() == null || dbMember.getEmail().isEmpty());
                 } else {
                     // 회원 정보를 찾을 수 없으면 추가 정보 필요
                     needsAdditionalInfo = true;
@@ -75,12 +72,10 @@ public class KakaoLoginController {
             Map<String, Object> userInfo = new HashMap<>();
             if (dbMember != null) {
                 // DB에서 조회한 실제 값 사용
-                userInfo.put("kakaoId", dbMember.getKakaoId() != null ? dbMember.getKakaoId() : "");
                 userInfo.put("email", dbMember.getEmail() != null ? dbMember.getEmail() : "");
                 userInfo.put("name", dbMember.getName() != null ? dbMember.getName() : "");
             } else {
                 // DB에 없으면 OAuth2User에서 가져온 값 사용 (null 제거)
-                userInfo.put("kakaoId", kakaoId != null ? kakaoId : "");
                 userInfo.put("email", email != null ? email : "");
                 userInfo.put("nickname", nickname != null ? nickname : "");
             }
@@ -100,8 +95,8 @@ public class KakaoLoginController {
             // 회원가입 중 플래그 (추가 정보 입력이 필요한 경우)
             response.put("isRegistrationComplete", !needsAdditionalInfo);
             
-            log.info("카카오 로그인 성공: kakaoId={}, memberId={}, name={}, email={}, needsAdditionalInfo={}", 
-                    kakaoId, memberId, memberName, email, needsAdditionalInfo);
+            log.info("카카오 로그인 성공: memberId={}, name={}, email={}, needsAdditionalInfo={}", 
+                    memberId, memberName, email, needsAdditionalInfo);
         } else {
             response.put("success", false);
             response.put("message", "로그인 실패");
@@ -126,13 +121,11 @@ public class KakaoLoginController {
         Map<String, Object> response = new HashMap<>();
         
         if (oauth2User != null) {
-            response.put("kakaoId", oauth2User.getAttribute("id"));
             response.put("email", oauth2User.getAttribute("email"));
             response.put("nickname", oauth2User.getAttribute("nickname"));
             response.put("memberId", oauth2User.getAttribute("memberId"));
             response.put("memberName", oauth2User.getAttribute("memberName"));
-        } else if (session.getAttribute("kakaoId") != null) {
-            response.put("kakaoId", session.getAttribute("kakaoId"));
+        } else if (session.getAttribute("email") != null) {
             response.put("email", session.getAttribute("email"));
             response.put("nickname", session.getAttribute("nickname"));
             response.put("memberId", session.getAttribute("memberId"));

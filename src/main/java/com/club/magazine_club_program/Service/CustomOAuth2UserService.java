@@ -59,7 +59,7 @@ public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
             );
             
             if (member == null) {
-                log.error("카카오 회원 생성/조회 실패: kakaoId={}", userInfo.getId());
+                log.error("카카오 회원 생성/조회 실패: email={}", userInfo.getEmail());
                 throw new OAuth2AuthenticationException("회원 정보 처리 실패");
             }
             
@@ -71,8 +71,8 @@ public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
             attributes.put("memberId", member.getId());
             attributes.put("memberName", member.getName());
             
-            log.info("회원 정보 연동 완료: memberId={}, kakaoId={}, name={}", 
-                    member.getId(), userInfo.getId(), member.getName());
+            log.info("회원 정보 연동 완료: memberId={}, email={}, name={}", 
+                    member.getId(), userInfo.getEmail(), member.getName());
             
             return new DefaultOAuth2User(
                     Collections.singleton(new SimpleGrantedAuthority("ROLE_USER")),
