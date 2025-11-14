@@ -41,3 +41,12 @@ build/
 .env.production
 .env.staging
 cookies.txt
+
+### Database ###
+# 마이그레이션 SQL 파일은 Git에 포함 (코드 일부로 취급)
+# 하지만 DB 덤프나 데이터 파일은 제외
+*.sql.dump
+*.sql.gz
+*.db
+*.sqlite
+*.sqlite3
