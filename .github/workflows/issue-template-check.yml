@@ -17,9 +17,9 @@ jobs:
           script: |
             const body = (context.payload.issue.body || '').trim();
             const requiredSections = [
-              '### 문제 설명',
-              '### 재현 절차',
-              '### 기대 동작'
+              '### :sparkles: 이슈 번호',
+              '### :bulb: 작업 내용',
+              '### :white_check_mark: 상세 내용'
             ];
             const missing = requiredSections.filter(section => !body.includes(section));
             if (missing.length === 0) {
