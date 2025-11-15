@@ -71,14 +71,6 @@ public class CustomOAuth2AuthorizedClientRepository implements OAuth2AuthorizedC
                 try {
                     // Refresh token 복호화
                     String decryptedRefreshToken = tokenEncryptionUtil.decrypt(tokenDTO.getRefreshTokenValue());
-                    
-                    // Refresh token으로 새로운 Access token 발급받기
-                    // 이 부분은 Spring Security OAuth2 Client가 자동으로 처리하므로,
-                    // 메모리에 있는 authorizedClient를 그대로 사용하고 refresh token을 복호화해서 전달
-                    // 실제 refresh 로직은 Spring Security가 처리합니다.
-                    
-                    // 현재는 메모리에서 로드한 클라이언트를 반환
-                    // Refresh token은 save 시 자동으로 업데이트됩니다.
                     @SuppressWarnings("unchecked")
                     T result = (T) authorizedClient;
                     return result;

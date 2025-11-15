@@ -4,7 +4,6 @@ public class MemberDTO {
     private int id;
     private String name;
     private String snsLink;        
-    private String kakaoId;
     private String email;
 
     public MemberDTO() {}
@@ -20,9 +19,8 @@ public class MemberDTO {
         this.snsLink = snsLink;
     }
 
-    public MemberDTO(String name, String kakaoId, String email) {
+    public MemberDTO(String name, String email) {
         this.name = name;
-        this.kakaoId = kakaoId;
         this.email = email;
     }
 
@@ -48,14 +46,6 @@ public class MemberDTO {
 
     public void setSnsLink(String snsLink) {
         this.snsLink = snsLink;
-    }
-
-    public String getKakaoId() {
-        return kakaoId;
-    }
-
-    public void setKakaoId(String kakaoId) {
-        this.kakaoId = kakaoId;
     }
 
     public String getEmail() {

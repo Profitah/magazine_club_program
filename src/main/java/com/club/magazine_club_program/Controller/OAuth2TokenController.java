@@ -45,11 +45,10 @@ public class OAuth2TokenController {
             }
 
             String principalName = oauth2User.getName();
-            String kakaoId = oauth2User.getAttribute("id");
             
             // 데이터베이스에서 토큰 조회
             OAuth2TokenDTO tokenDTO = oAuth2TokenMapper.findByPrincipalNameAndRegistrationId(
-                    principalName != null ? principalName : kakaoId, 
+                    principalName,
                     "kakao"
             );
 
@@ -73,7 +72,6 @@ public class OAuth2TokenController {
                 response.put("message", "Refresh token 조회 성공");
                 response.put("token", tokenInfo);
                 response.put("user", Map.of(
-                    "kakaoId", kakaoId != null ? kakaoId : "",
                     "memberId", oauth2User.getAttribute("memberId"),
                     "memberName", oauth2User.getAttribute("memberName")
                 ));
@@ -103,33 +101,6 @@ public class OAuth2TokenController {
             log.error("토큰 조회 실패", e);
             response.put("success", false);
             response.put("message", "토큰 조회 실패: " + e.getMessage());
-            return ResponseEntity.status(500).body(response);
-        }
-    }
-
-    /**
-     * 데이터베이스 토큰 테이블 상태 확인 (테스트용)
-     * GET /oauth2/token/test
-     */
-    @GetMapping("/test")
-    public ResponseEntity<?> testTokenStorage() {
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            // 테스트용 조회 (principalName으로 조회)
-            OAuth2TokenDTO tokenDTO = oAuth2TokenMapper.findByPrincipalNameAndRegistrationId("test", "kakao");
-            
-            response.put("success", true);
-            response.put("message", "데이터베이스 연결 성공");
-            response.put("tokenTableExists", true);
-            response.put("testQueryResult", tokenDTO != null ? "토큰 존재" : "토큰 없음");
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("데이터베이스 테스트 실패", e);
-            response.put("success", false);
-            response.put("message", "데이터베이스 연결 실패: " + e.getMessage());
-            response.put("tokenTableExists", false);
             return ResponseEntity.status(500).body(response);
         }
     }

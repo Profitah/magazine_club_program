@@ -38,22 +38,39 @@ public class TokenEncryptionUtil {
     private final SecretKey secretKey;
 
     public TokenEncryptionUtil(@Value("${TOKEN_ENCRYPTION_KEY:}") String encryptionKey) {
+        SecretKey key;
         if (encryptionKey == null || encryptionKey.isEmpty()) {
-            throw new IllegalStateException(
-                "TOKEN_ENCRYPTION_KEY 환경 변수가 설정되지 않았습니다. " +
-                "256비트(32바이트) 키를 Base64 인코딩하여 설정해주세요."
-            );
-        }
-
+            log.warn("TOKEN_ENCRYPTION_KEY 환경 변수가 설정되지 않았습니다. " +
+                    "임시 키를 생성하여 사용합니다. 프로덕션 환경에서는 반드시 설정해주세요.");
+            // 임시 키 자동 생성 (서버 재시작 시마다 변경됨)
+            key = generateTemporaryKey();
+            log.warn("임시 암호화 키로 초기화되었습니다. OAuth2 토큰이 서버 재시작 시 유효하지 않을 수 있습니다.");
+        } else {
         try {
             byte[] keyBytes = Base64.getDecoder().decode(encryptionKey);
             if (keyBytes.length != 32) {
                 throw new IllegalArgumentException("암호화 키는 32바이트(256비트)여야 합니다.");
             }
-            this.secretKey = new SecretKeySpec(keyBytes, AES);
+                key = new SecretKeySpec(keyBytes, AES);
             log.info("토큰 암호화 유틸리티 초기화 완료");
+            } catch (Exception e) {
+                log.error("암호화 키 초기화 실패, 임시 키로 대체합니다: " + e.getMessage());
+                key = generateTemporaryKey();
+            }
+        }
+        this.secretKey = key;
+    }
+    
+    /**
+     * 임시 암호화 키 생성 (서버 시작 시 자동 생성)
+     */
+    private SecretKey generateTemporaryKey() {
+        try {
+            KeyGenerator keyGenerator = KeyGenerator.getInstance(AES);
+            keyGenerator.init(256);
+            return keyGenerator.generateKey();
         } catch (Exception e) {
-            throw new IllegalStateException("암호화 키 초기화 실패: " + e.getMessage(), e);
+            throw new IllegalStateException("임시 키 생성 실패", e);
         }
     }
 
