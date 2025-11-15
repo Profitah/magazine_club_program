@@ -27,7 +27,9 @@ public class MemberController {
             List<MemberDTO> members = memberService.getAllMembers();
             return ResponseEntity.ok(members);
         } catch (Exception e) {
-            return ResponseEntity.ok("전체 멤버 조회 실패: " + e.getMessage());
+            String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+            e.printStackTrace(); // 스택 트레이스 출력
+            return ResponseEntity.ok("전체 멤버 조회 실패: " + errorMsg + " (자세한 내용은 서버 로그 확인)");
         }
     }
 

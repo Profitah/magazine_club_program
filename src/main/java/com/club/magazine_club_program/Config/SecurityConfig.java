@@ -15,19 +15,22 @@ import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.core.session.SessionRegistry;
 import org.springframework.security.core.session.SessionRegistryImpl;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
 
-    private final CustomOAuth2UserService customOAuth2UserService;
-    private final CustomOAuth2AuthorizedClientRepository customOAuth2AuthorizedClientRepository;
+    @Autowired(required = false)
+    private CustomOAuth2UserService customOAuth2UserService;
+    
+    @Autowired(required = false)
+    private CustomOAuth2AuthorizedClientRepository customOAuth2AuthorizedClientRepository;
+    
+    @Autowired(required = false)
+    private CustomOAuth2AuthenticationSuccessHandler customOAuth2AuthenticationSuccessHandler;
 
-    public SecurityConfig(
-            CustomOAuth2UserService customOAuth2UserService,
-            CustomOAuth2AuthorizedClientRepository customOAuth2AuthorizedClientRepository) {
-        this.customOAuth2UserService = customOAuth2UserService;
-        this.customOAuth2AuthorizedClientRepository = customOAuth2AuthorizedClientRepository;
+    public SecurityConfig() {
     }
 
     @Bean
@@ -42,30 +45,37 @@ public class SecurityConfig {
                         .requestMatchers(new AntPathRequestMatcher("/admin/verify-authenticator")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/admin/verify-for-chat")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/admin/logout")).permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/logout")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/login/kakao/**")).permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/login/google/**")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/login/oauth2/**")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/oauth2/authorization/**")).permitAll()
-                        .requestMatchers(new AntPathRequestMatcher("/oauth2/token/test")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/oauth2/token/**")).authenticated()
                         .requestMatchers(new AntPathRequestMatcher("/oauth2/**")).permitAll()
                         .anyRequest().permitAll()
                 )
                 .requestCache(cache -> cache.requestCache(requestCache))
-                .oauth2Login(oauth2 -> oauth2
-                        .userInfoEndpoint(userInfo -> userInfo
+                .oauth2Login(oauth2 -> {
+                    if (customOAuth2UserService != null) {
+                        oauth2.userInfoEndpoint(userInfo -> userInfo
                                 .userService(customOAuth2UserService)
-                        )
-                        .authorizedClientRepository(customOAuth2AuthorizedClientRepository)
-                        .authorizationEndpoint(authorization -> authorization
+                        );
+                    }
+                    if (customOAuth2AuthorizedClientRepository != null) {
+                        oauth2.authorizedClientRepository(customOAuth2AuthorizedClientRepository);
+                    }
+                    oauth2.authorizationEndpoint(authorization -> authorization
                                 .baseUri("/oauth2/authorization")
                                 .authorizationRequestRepository(authorizationRequestRepository())
-                        )
-                        .redirectionEndpoint(redirection -> redirection
+                    );
+                    oauth2.redirectionEndpoint(redirection -> redirection
                                 .baseUri("/login/oauth2/code/*")
-                        )
-                        .defaultSuccessUrl("/login/kakao/success", true)
-                        .failureUrl("/login/kakao/failure")
-                )
+                    );
+                    oauth2.successHandler(customOAuth2AuthenticationSuccessHandler != null 
+                                ? customOAuth2AuthenticationSuccessHandler 
+                            : new org.springframework.security.web.authentication.SimpleUrlAuthenticationSuccessHandler("/login/oauth2/success"));
+                    oauth2.failureUrl("/login/oauth2/failure");
+                })
                 .headers(headers -> headers.frameOptions().disable())
                 .sessionManagement(session -> session
                         .sessionFixation().migrateSession()

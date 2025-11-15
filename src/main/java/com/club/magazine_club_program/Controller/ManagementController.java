@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/")
+@RequestMapping("/management")
 public class ManagementController {
 
     @Autowired
@@ -22,7 +22,7 @@ public class ManagementController {
     private MemberService memberService;
 
     // 모든 멤버 출석, 과제 여부 조회
-    @GetMapping
+    @GetMapping("/")
     public ResponseEntity<List<ManagementDTO>> getMemberStat() {
         List<ManagementDTO> stats = managementService.getAllMemberStat();
         List<MemberDTO> members = memberService.getAllMembers();

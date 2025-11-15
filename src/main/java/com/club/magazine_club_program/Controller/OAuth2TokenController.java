@@ -106,33 +106,6 @@ public class OAuth2TokenController {
     }
 
     /**
-     * 데이터베이스 토큰 테이블 상태 확인 (테스트용)
-     * GET /oauth2/token/test
-     */
-    @GetMapping("/test")
-    public ResponseEntity<?> testTokenStorage() {
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            // 테스트용 조회 (principalName으로 조회)
-            OAuth2TokenDTO tokenDTO = oAuth2TokenMapper.findByPrincipalNameAndRegistrationId("test", "kakao");
-            
-            response.put("success", true);
-            response.put("message", "데이터베이스 연결 성공");
-            response.put("tokenTableExists", true);
-            response.put("testQueryResult", tokenDTO != null ? "토큰 존재" : "토큰 없음");
-            
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            log.error("데이터베이스 테스트 실패", e);
-            response.put("success", false);
-            response.put("message", "데이터베이스 연결 실패: " + e.getMessage());
-            response.put("tokenTableExists", false);
-            return ResponseEntity.status(500).body(response);
-        }
-    }
-
-    /**
      * 만료된 토큰 삭제 (테스트/관리용)
      * DELETE /oauth2/token/expired
      */

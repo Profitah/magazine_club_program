@@ -64,6 +64,7 @@ public interface MemberInfoMapper {
         INSERT INTO MemberInfo (name, sns_link, email)
         VALUES (#{name}, #{snsLink}, #{email})
     """)
+    @org.apache.ibatis.annotations.Options(useGeneratedKeys = true, keyProperty = "id", keyColumn = "id")
     int addKakaoMember(MemberDTO member);
 
     // 이메일로 회원 정보 업데이트
