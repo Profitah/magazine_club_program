@@ -9,7 +9,8 @@ public class PhotoMetadataDTO {
     private boolean success;
     private String message;
     private LocalDateTime capturedAt; 
-    private String location;         
+    private String location;
+    private String imageUrl;         
 
     public boolean isSuccess() {
         return success;
@@ -43,6 +44,14 @@ public class PhotoMetadataDTO {
 
     public void setLocation(String location) {
         this.location = location;
+    }
+
+    public String getImageUrl() {
+        return imageUrl;
+    }
+
+    public void setImageUrl(String imageUrl) {
+        this.imageUrl = imageUrl;
     }
 }
 

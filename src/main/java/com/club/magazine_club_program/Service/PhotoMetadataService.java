@@ -20,6 +20,7 @@ public class PhotoMetadataService {
 
     private final PhotoMetadataMapper mapper;
     private final ReverseGeocodingService reverseGeocodingService;
+    private S3Service s3Service;
 
     public PhotoMetadataService(PhotoMetadataMapper mapper) {
         this.mapper = mapper;
@@ -30,6 +31,11 @@ public class PhotoMetadataService {
     public PhotoMetadataService(PhotoMetadataMapper mapper, ReverseGeocodingService reverseGeocodingService) {
         this.mapper = mapper;
         this.reverseGeocodingService = reverseGeocodingService;
+    }
+
+    @Autowired(required = false)
+    public void setS3Service(S3Service s3Service) {
+        this.s3Service = s3Service;
     }
 
     public PhotoMetadataDTO extractMetadata(MultipartFile file) {
@@ -67,7 +73,28 @@ public class PhotoMetadataService {
                 location = reverseGeocodingService.reverseGeocodeCountryRegion(latitude, longitude);
             }
 
-            return mapper.toSuccess(capturedAt, location);
+            PhotoMetadataDTO dto = mapper.toSuccess(capturedAt, location);
+            
+            // S3에 이미지 저장
+            if (s3Service != null) {
+                try {
+                    String contentType = file.getContentType();
+                    if (contentType == null || !contentType.startsWith("image/")) {
+                        contentType = "image/jpeg";
+                    }
+                    String filename = file.getOriginalFilename();
+                    if (filename == null || filename.isEmpty()) {
+                        filename = "photo_" + System.currentTimeMillis() + ".jpg";
+                    }
+                    String s3Url = s3Service.uploadImage(file.getInputStream(), contentType, "photos", filename);
+                    dto.setImageUrl(s3Url);
+                } catch (Exception e) {
+                    // S3 업로드 실패해도 메타데이터는 반환
+                    System.err.println("S3 업로드 실패: " + e.getMessage());
+                }
+            }
+
+            return dto;
         } catch (Exception e) {
             return mapper.toFailure("메타데이터 읽기 실패: " + e.getMessage());
         }

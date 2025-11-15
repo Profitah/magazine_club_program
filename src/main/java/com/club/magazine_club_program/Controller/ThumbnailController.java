@@ -77,6 +77,65 @@ public class ThumbnailController {
     }
     
     /**
+     * 인스타그램 썸네일 크롤링 및 S3 저장
+     */
+    @PostMapping("/thumbnails/{username}/save")
+    public ResponseEntity<?> crawlAndSaveToS3(@PathVariable String username) {
+        try {
+            if (!thumbnailService.isPythonServiceHealthy()) {
+                return ResponseEntity.ok("파이썬 크롤링 서비스가 사용 불가능합니다.");
+            }
+            
+            ThumbnailDTO result = thumbnailService.getInstagramThumbnailsAndSave(username, true);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.ok("크롤링 및 S3 저장 실패: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * S3에 저장된 인스타그램 갤러리 조회 (페이지네이션)
+     */
+    @GetMapping("/gallery/{username}/page/{page}")
+    public ResponseEntity<?> getGallery(
+            @PathVariable String username,
+            @PathVariable int page) {
+        try {
+            if (page < 1) {
+                return ResponseEntity.ok("페이지 번호는 1 이상이어야 합니다.");
+            }
+            
+            ThumbnailDTO result = thumbnailService.getInstagramGalleryWithPagination(username, page, 3);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.ok("갤러리 조회 실패: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * S3에 저장된 인스타그램 갤러리 조회 (커스텀 페이지네이션)
+     */
+    @GetMapping("/gallery/{username}/page/{page}/size/{pageSize}")
+    public ResponseEntity<?> getGalleryWithCustomPagination(
+            @PathVariable String username,
+            @PathVariable int page,
+            @PathVariable int pageSize) {
+        try {
+            if (page < 1) {
+                return ResponseEntity.ok("페이지 번호는 1 이상이어야 합니다.");
+            }
+            if (pageSize < 1 || pageSize > 20) {
+                return ResponseEntity.ok("페이지 크기는 1-20 사이여야 합니다.");
+            }
+            
+            ThumbnailDTO result = thumbnailService.getInstagramGalleryWithPagination(username, page, pageSize);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            return ResponseEntity.ok("갤러리 조회 실패: " + e.getMessage());
+        }
+    }
+    
+    /**
      * 파이썬 서비스 상태 확인
      */
     @GetMapping("/health")
