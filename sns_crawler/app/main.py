@@ -4,6 +4,10 @@ from typing import List, Optional
 from datetime import datetime
 import uvicorn
 import logging
+from dotenv import load_dotenv
+
+# .env 파일 로드
+load_dotenv()
 
 from app.models.instagram import InstagramThumbnail, InstagramResponse
 from app.services.instagram_crawler import InstagramCrawler
@@ -57,7 +61,9 @@ async def health_check():
 @app.get("/instagram/thumbnails/{username}")
 async def get_thumbnails(
     username: str, 
-    use_selenium: bool = Query(False, description="Selenium 사용 여부"),
+    use_selenium: bool = Query(True, description="Selenium 사용 여부 (기본값: True)"),
+    use_api: bool = Query(False, description="Web Profile API 사용 여부 (기본값: False)"),
+    use_official_api: bool = Query(False, description="Instagram 공식 Graph API 사용 여부 (기본값: False, 액세스 토큰 필요)"),
     as_base64: bool = Query(False, description="Base64 인코딩 여부")
 ):
     """인스타그램 썸네일 이미지 URL 조회"""
@@ -69,7 +75,7 @@ async def get_thumbnails(
         logger.info(f"인스타그램 썸네일 조회 시작: {username}")
         
         # 썸네일 URL 크롤링
-        thumbnail_urls = crawler.get_thumbnails(username, use_selenium)
+        thumbnail_urls = crawler.get_thumbnails(username, use_selenium=use_selenium, use_api=use_api, use_official_api=use_official_api)
         
         if not thumbnail_urls:
             return InstagramResponse(
@@ -125,14 +131,16 @@ async def get_thumbnails(
 @app.get("/instagram/thumbnails/urls/{username}")
 async def get_thumbnail_urls(
     username: str, 
-    use_selenium: bool = Query(False, description="Selenium 사용 여부")
+    use_selenium: bool = Query(True, description="Selenium 사용 여부 (기본값: True)"),
+    use_api: bool = Query(False, description="Web Profile API 사용 여부 (기본값: False)"),
+    use_official_api: bool = Query(False, description="Instagram 공식 Graph API 사용 여부 (기본값: False, 액세스 토큰 필요)")
 ):
     """썸네일 URL만 간단하게 반환"""
     try:
         if not validate_instagram_username(username):
             raise HTTPException(status_code=400, detail="유효하지 않은 인스타그램 사용자명입니다.")
         
-        thumbnail_urls = crawler.get_thumbnails(username, use_selenium)
+        thumbnail_urls = crawler.get_thumbnails(username, use_selenium=use_selenium, use_api=use_api, use_official_api=use_official_api)
         
         return {
             "username": username,
@@ -146,6 +154,63 @@ async def get_thumbnail_urls(
     except Exception as e:
         logger.error(f"썸네일 URL 조회 실패: {e}")
         raise HTTPException(status_code=500, detail=f"크롤링 실패: {str(e)}")
+
+@app.post("/instagram/images/download")
+async def download_image_from_url(image_url: str = Query(..., description="다운로드할 이미지 URL")):
+    """이미지 URL에서 이미지를 다운로드하여 base64로 반환 (Selenium 세션 사용)"""
+    try:
+        import base64
+        from app.services.instagram_crawler import InstagramCrawler
+        
+        crawler = InstagramCrawler()
+        # Selenium으로 이미지 다운로드 (별도 세션 생성)
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from webdriver_manager.chrome import ChromeDriverManager
+        import os
+        
+        chrome_options = Options()
+        chrome_options.add_argument('--headless=new')
+        chrome_options.add_argument('--no-sandbox')
+        chrome_options.add_argument('--disable-dev-shm-usage')
+        chrome_options.add_argument('--disable-gpu')
+        
+        import platform
+        if platform.system() == 'Darwin':
+            chrome_paths = [
+                '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+                '/Applications/Chromium.app/Contents/MacOS/Chromium'
+            ]
+            for path in chrome_paths:
+                if os.path.exists(path):
+                    chrome_options.binary_location = path
+                    break
+        
+        driver = None
+        try:
+            driver = webdriver.Chrome(
+                service=webdriver.chrome.service.Service(ChromeDriverManager().install()),
+                options=chrome_options
+            )
+            
+            image_bytes = crawler.download_image_with_selenium(image_url, driver)
+            
+            if image_bytes:
+                base64_image = base64.b64encode(image_bytes).decode('utf-8')
+                return {
+                    "success": True,
+                    "image_base64": base64_image,
+                    "content_type": "image/jpeg"
+                }
+            else:
+                raise HTTPException(status_code=500, detail="이미지 다운로드 실패")
+        finally:
+            if driver:
+                driver.quit()
+                
+    except Exception as e:
+        logger.error(f"이미지 다운로드 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"이미지 다운로드 실패: {str(e)}")
 
 
 if __name__ == "__main__":
