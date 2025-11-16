@@ -2,6 +2,10 @@ import base64
 import requests
 from typing import List, Optional
 import logging
+import os
+import boto3
+from botocore.config import Config
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
@@ -72,3 +76,82 @@ def format_thumbnail_data(thumbnail_urls: List[str], username: str) -> List[dict
         })
     
     return formatted_data
+
+def upload_images_to_s3(image_urls: List[str], username: str) -> List[str]:
+    """주어진 이미지 URL들을 S3로 업로드하고 S3 URL 리스트를 반환"""
+    bucket = os.getenv('AWS_S3_BUCKET_NAME', '')
+    region = os.getenv('AWS_S3_REGION', 'ap-southeast-2')
+    if not bucket:
+        logger.error("AWS_S3_BUCKET_NAME이 설정되지 않았습니다.")
+        return []
+    
+    s3 = boto3.client(
+        's3',
+        region_name=region,
+        config=Config(retries={'max_attempts': 3, 'mode': 'standard'})
+    )
+    
+    uploaded_urls: List[str] = []
+    ts = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+    
+    for idx, url in enumerate(image_urls):
+        try:
+            resp = requests.get(url, timeout=15)
+            resp.raise_for_status()
+            content_type = resp.headers.get('Content-Type', 'image/jpeg')
+            ext = 'jpg'
+            if 'png' in content_type:
+                ext = 'png'
+            elif 'webp' in content_type:
+                ext = 'webp'
+            key = f"instagram/{username}/{ts}_{idx+1}.{ext}"
+            s3.put_object(
+                Bucket=bucket,
+                Key=key,
+                Body=resp.content,
+                ContentType=content_type,
+                ACL='public-read'
+            )
+            public_url = f"https://{bucket}.s3.{region}.amazonaws.com/{key}"
+            uploaded_urls.append(public_url)
+            logger.info(f"S3 업로드 성공: {public_url}")
+        except Exception as e:
+            logger.error(f"S3 업로드 실패 ({url}): {e}")
+            continue
+    
+    return uploaded_urls
+
+def upload_bytes_to_s3(file_bytes: bytes, filename: str, username: str = "user") -> str:
+    """바이트 데이터를 S3로 업로드하고 퍼블릭 URL 반환"""
+    bucket = os.getenv('AWS_S3_BUCKET_NAME', '')
+    region = os.getenv('AWS_S3_REGION', 'ap-southeast-2')
+    if not bucket:
+        raise ValueError("AWS_S3_BUCKET_NAME이 설정되지 않았습니다.")
+    
+    s3 = boto3.client(
+        's3',
+        region_name=region,
+        config=Config(retries={'max_attempts': 3, 'mode': 'standard'})
+    )
+    
+    # 확장자/컨텐츠타입 추정
+    ext = (filename.rsplit('.', 1)[-1].lower() if '.' in filename else 'jpg')
+    content_type = {
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'webp': 'image/webp'
+    }.get(ext, 'application/octet-stream')
+    
+    ts = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+    safe_name = filename.replace('/', '_')
+    key = f"uploads/{username}/{ts}_{safe_name}"
+    
+    s3.put_object(
+        Bucket=bucket,
+        Key=key,
+        Body=file_bytes,
+        ContentType=content_type,
+        ACL='public-read'
+    )
+    return f"https://{bucket}.s3.{region}.amazonaws.com/{key}"

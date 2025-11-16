@@ -1,9 +1,7 @@
 fastapi
 uvicorn
 requests
-beautifulsoup4
-selenium
-webdriver-manager
 pydantic
 python-multipart
 python-dotenv
+boto3
