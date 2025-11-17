@@ -4,6 +4,7 @@ public class AdminDTO {
     private Integer id;
     private String email;
     private String totpSecret;
+    private String role;  // SUPER_ADMIN, ADMIN, MODERATOR (권한 위임을 위해)
 
     public AdminDTO() {
     }
@@ -35,6 +36,14 @@ public class AdminDTO {
 
     public void setTotpSecret(String totpSecret) {
         this.totpSecret = totpSecret;
+    }
+
+    public String getRole() {
+        return role;
+    }
+
+    public void setRole(String role) {
+        this.role = role;
     }
 }
 

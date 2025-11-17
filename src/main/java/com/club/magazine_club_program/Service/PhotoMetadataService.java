@@ -11,6 +11,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
@@ -43,8 +44,12 @@ public class PhotoMetadataService {
             return mapper.toFailure("파일이 비어있습니다.");
         }
 
-        try (InputStream is = file.getInputStream()) {
-            Metadata metadata = ImageMetadataReader.readMetadata(is);
+        try {
+            // 파일을 byte 배열로 읽어서 재사용 가능하게 함
+            byte[] fileBytes = file.getBytes();
+            
+            // 메타데이터 읽기
+            Metadata metadata = ImageMetadataReader.readMetadata(new ByteArrayInputStream(fileBytes));
 
             LocalDateTime capturedAt = null;
             Double latitude = null;
@@ -82,11 +87,24 @@ public class PhotoMetadataService {
                     if (contentType == null || !contentType.startsWith("image/")) {
                         contentType = "image/jpeg";
                     }
-                    String filename = file.getOriginalFilename();
-                    if (filename == null || filename.isEmpty()) {
+                    String originalFilename = file.getOriginalFilename();
+                    String filename;
+                    if (originalFilename == null || originalFilename.isEmpty()) {
                         filename = "photo_" + System.currentTimeMillis() + ".jpg";
+                    } else {
+                        // 파일명에 타임스탬프 추가하여 중복 방지
+                        String nameWithoutExt = originalFilename;
+                        String extension = "";
+                        int lastDotIndex = originalFilename.lastIndexOf('.');
+                        if (lastDotIndex > 0) {
+                            nameWithoutExt = originalFilename.substring(0, lastDotIndex);
+                            extension = originalFilename.substring(lastDotIndex);
+                        }
+                        filename = nameWithoutExt + "_" + System.currentTimeMillis() + extension;
                     }
-                    String s3Url = s3Service.uploadImage(file.getInputStream(), contentType, "photos", filename);
+                    // byte 배열을 InputStream으로 변환하여 S3에 업로드
+                    InputStream fileInputStream = new ByteArrayInputStream(fileBytes);
+                    String s3Url = s3Service.uploadImage(fileInputStream, contentType, "photos", filename);
                     dto.setImageUrl(s3Url);
                 } catch (Exception e) {
                     // S3 업로드 실패해도 메타데이터는 반환

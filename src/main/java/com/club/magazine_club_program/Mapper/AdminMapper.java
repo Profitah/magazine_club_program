@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.*;
 @Mapper
 public interface AdminMapper {
 
-    @Select("SELECT id, email, totp_secret as totpSecret FROM Admin WHERE email = #{email}")
+    @Select("SELECT id, email, totp_secret as totpSecret, role FROM Admin WHERE email = #{email}")
     AdminDTO findByEmail(String email);
 
     @Update("UPDATE Admin SET totp_secret = #{totpSecret} WHERE email = #{email}")
