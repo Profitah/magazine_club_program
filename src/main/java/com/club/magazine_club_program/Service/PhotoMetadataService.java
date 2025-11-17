@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.io.ByteArrayInputStream;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.Date;
 
 @Service
@@ -37,6 +38,28 @@ public class PhotoMetadataService {
     @Autowired(required = false)
     public void setS3Service(S3Service s3Service) {
         this.s3Service = s3Service;
+    }
+
+    /**
+     * 촬영일시가 오늘 기준 7일 이전 ~ 1일 이전 사이인지 검증
+     * 예: 오늘이 11월 17일이면, 11월 10일 ~ 11월 16일 사이에 촬영된 사진만 허용
+     * @param capturedAt 촬영일시
+     * @return 검증 통과 여부
+     */
+    private boolean isValidCaptureDate(LocalDateTime capturedAt) {
+        if (capturedAt == null) {
+            return false;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+        // 오늘 00:00:00 기준으로 계산
+        LocalDateTime todayStart = now.toLocalDate().atStartOfDay();
+        LocalDateTime sevenDaysAgo = todayStart.minus(7, ChronoUnit.DAYS);
+        LocalDateTime oneDayAgo = todayStart.minus(1, ChronoUnit.DAYS);
+
+        // 7일 이전(포함) ~ 1일 이전(포함) 사이에 촬영된 사진만 허용
+        // capturedAt >= sevenDaysAgo && capturedAt <= oneDayAgo
+        return !capturedAt.isBefore(sevenDaysAgo) && !capturedAt.isAfter(oneDayAgo);
     }
 
     public PhotoMetadataDTO extractMetadata(MultipartFile file) {
@@ -73,6 +96,19 @@ public class PhotoMetadataService {
                 return mapper.toFailure("유효한 사진 메타데이터(EXIF)를 찾을 수 없습니다.");
             }
 
+            // 촬영일시 검증: 오늘 기준 7일 이전 ~ 1일 이전 사이에 촬영된 사진만 허용
+            if (capturedAt != null && !isValidCaptureDate(capturedAt)) {
+                LocalDateTime todayStart = LocalDateTime.now().toLocalDate().atStartOfDay();
+                LocalDateTime sevenDaysAgo = todayStart.minus(7, ChronoUnit.DAYS);
+                LocalDateTime oneDayAgo = todayStart.minus(1, ChronoUnit.DAYS);
+                return mapper.toFailure(
+                    String.format("과제 제출은 오늘 기준 1일 이전 ~ 7일 이전 사이에 촬영된 사진만 가능합니다. (촬영일시: %s, 허용 범위: %s ~ %s)",
+                        capturedAt.toLocalDate().toString(),
+                        sevenDaysAgo.toLocalDate().toString(),
+                        oneDayAgo.toLocalDate().toString())
+                );
+            }
+
             String location = null;
             if (latitude != null && longitude != null && reverseGeocodingService != null) {
                 location = reverseGeocodingService.reverseGeocodeCountryRegion(latitude, longitude);
@@ -80,8 +116,8 @@ public class PhotoMetadataService {
 
             PhotoMetadataDTO dto = mapper.toSuccess(capturedAt, location);
             
-            // S3에 이미지 저장
-            if (s3Service != null) {
+            // 촬영일시 검증 통과 시에만 S3에 이미지 저장
+            if (s3Service != null && capturedAt != null && isValidCaptureDate(capturedAt)) {
                 try {
                     String contentType = file.getContentType();
                     if (contentType == null || !contentType.startsWith("image/")) {

@@ -5,6 +5,7 @@ import com.club.magazine_club_program.Mapper.ClubPostMapper;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 @Service
@@ -39,6 +40,14 @@ public class ClubPostService {
         if (clubPost.getCreatedByAdminId() == null) {
             throw new IllegalArgumentException("작성자 Admin ID가 필요합니다.");
         }
+        
+        // 마감일 자동 설정: 생성일부터 7일 뒤
+        if (clubPost.getDueDate() == null) {
+            LocalDateTime dueDate = clubPost.getCreatedAt().plus(7, ChronoUnit.DAYS);
+            // 마감일은 해당 날짜의 23:59:59로 설정
+            clubPost.setDueDate(dueDate.toLocalDate().atTime(23, 59, 59));
+        }
+        
         clubPost.setActive(true);
         
         clubPostMapper.insert(clubPost);
