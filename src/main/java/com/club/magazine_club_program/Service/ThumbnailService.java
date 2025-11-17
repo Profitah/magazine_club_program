@@ -10,8 +10,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -22,7 +25,7 @@ public class ThumbnailService {
     @Autowired
     private RestTemplate restTemplate;
     
-    @Autowired
+    @Autowired(required = false)
     private S3Service s3Service;
     
     @Autowired
@@ -44,7 +47,7 @@ public class ThumbnailService {
     public ThumbnailDTO getInstagramThumbnails(String username) {
         try {
             String actualUsername = convertUsername(username);
-            String url = pythonServiceUrl + "/instagram/thumbnails/urls/" + actualUsername;
+            String url = pythonServiceUrl + "/instagram/thumbnails/urls/" + actualUsername + "?use_selenium=true";
             
             ResponseEntity<Map> response = restTemplate.getForEntity(url, Map.class);
             
@@ -95,6 +98,12 @@ public class ThumbnailService {
             String originalUrl = originalUrls.get(i);
             
             try {
+                if (s3Service == null) {
+                    // S3 서비스가 없으면 원본 URL 사용
+                    s3Urls.add(originalUrl);
+                    continue;
+                }
+                
                 // 이미 저장된 이미지인지 확인
                 if (instagramGalleryMapper.existsByOriginalUrl(originalUrl)) {
                     // 이미 저장된 경우 DB에서 S3 URL 조회
@@ -110,17 +119,62 @@ public class ThumbnailService {
                 }
                 
                 // S3에 업로드
-                String s3Url = s3Service.uploadInstagramImage(originalUrl, username, i);
-                s3Urls.add(s3Url);
+                // 인스타그램 이미지는 403 오류가 발생할 수 있으므로
+                // 크롤러에서 이미지를 다운로드해서 base64로 전달받아 S3에 업로드
+                String s3Url = null;
+                try {
+                    // 파이썬 서비스에서 이미지를 base64로 다운로드
+                    String downloadUrl = pythonServiceUrl + "/instagram/images/download?image_url=" + 
+                                        URLEncoder.encode(originalUrl, StandardCharsets.UTF_8);
+                    ResponseEntity<Map> downloadResponse = restTemplate.postForEntity(downloadUrl, null, Map.class);
+                    
+                    if (downloadResponse.getStatusCode() == HttpStatus.OK && downloadResponse.getBody() != null) {
+                        Map<String, Object> downloadBody = downloadResponse.getBody();
+                        Boolean downloadSuccess = (Boolean) downloadBody.get("success");
+                        String imageBase64 = (String) downloadBody.get("image_base64");
+                        String contentType = (String) downloadBody.get("content_type");
+                        
+                        if (downloadSuccess != null && downloadSuccess && imageBase64 != null) {
+                            // base64를 바이트 배열로 변환
+                            byte[] imageBytes = Base64.getDecoder().decode(imageBase64);
+                            
+                            // S3에 업로드
+                            String filename = username + "_" + System.currentTimeMillis() + "_" + i + ".jpg";
+                            if (contentType == null) {
+                                contentType = "image/jpeg";
+                            }
+                            s3Url = s3Service.uploadImageFromBytes(imageBytes, contentType, "instagram", filename);
+                            s3Urls.add(s3Url);
+                        } else {
+                            throw new RuntimeException("파이썬 서비스에서 이미지 다운로드 실패");
+                        }
+                    } else {
+                        throw new RuntimeException("파이썬 서비스 응답 오류");
+                    }
+                } catch (Exception uploadException) {
+                    // S3 업로드 실패 시 원본 URL 사용
+                    s3Urls.add(originalUrl);
+                    String errorMsg = uploadException.getMessage() != null ? uploadException.getMessage() : uploadException.getClass().getSimpleName();
+                    System.err.println("S3 업로드 실패 (원본 URL 사용): " + errorMsg);
+                    s3Url = originalUrl; // DB 저장을 위해 원본 URL 사용
+                }
                 
-                // DB에 저장
-                InstagramImageDTO imageDTO = new InstagramImageDTO(username, originalUrl, s3Url);
-                instagramGalleryMapper.insert(imageDTO);
+                // DB에 저장 (S3 URL 또는 원본 URL)
+                if (s3Url != null && instagramGalleryMapper != null) {
+                    try {
+                        InstagramImageDTO imageDTO = new InstagramImageDTO(username, originalUrl, s3Url);
+                        instagramGalleryMapper.insert(imageDTO);
+                    } catch (Exception dbException) {
+                        // DB 저장 실패해도 S3 업로드는 성공했으므로 계속 진행
+                        System.err.println("DB 저장 실패 (S3 업로드는 성공): " + dbException.getMessage());
+                    }
+                }
                 
             } catch (Exception e) {
                 // S3 업로드 실패 시 원본 URL 사용
                 s3Urls.add(originalUrl);
-                System.err.println("S3 업로드 실패: " + e.getMessage());
+                String errorMsg = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                System.err.println("S3 업로드 실패: " + errorMsg);
             }
         }
         

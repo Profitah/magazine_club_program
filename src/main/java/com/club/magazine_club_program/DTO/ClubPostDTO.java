@@ -9,7 +9,7 @@ public class ClubPostDTO {
     private Integer createdByAdminId;  // 작성자 Admin ID (권한 위임을 위해)
     private String createdByName;      // 작성자 이름 (표시용, JOIN으로 가져옴)
     private LocalDateTime createdAt;   // 생성일시
-    private LocalDateTime dueDate;     // 과제 마감일 (선택사항)
+    private LocalDateTime dueDate;     // 과제 마감일
     private boolean isActive;          // 활성화 여부
 
     public ClubPostDTO() {}
