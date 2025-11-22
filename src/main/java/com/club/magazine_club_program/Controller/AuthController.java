@@ -15,7 +15,7 @@ import java.util.Map;
 
 /**
  * 일반 사용자 인증 컨트롤러
- * 카카오/구글 로그아웃 통합 처리 및 토큰 갱신
+ * 카카오/구글/일반 로그인 통합 로그아웃 처리 및 토큰 갱신
  */
 @RestController
 @RequestMapping("/auth")
@@ -29,11 +29,12 @@ public class AuthController {
     }
 
     /**
-     * 일반 사용자 로그아웃 (카카오/구글 통합)
+     * 일반 사용자 로그아웃 (카카오/구글/일반 로그인 통합)
      * POST /auth/logout
      * 
+     * 모든 로그인 방식(카카오, 구글, 일반 로그인)에서 공통으로 사용하는 통합 로그아웃 엔드포인트.
      * JWT 토큰 중심 인증이므로 세션 무효화는 선택사항.
-     * 클라이언트에서 JWT 토큰 삭제만 하면 됨.
+     * 클라이언트에서 JWT 토큰(Access Token, Refresh Token) 삭제만 하면 됨.
      */
     @PostMapping("/logout")
     public ResponseEntity<Map<String, Object>> logout(HttpSession session) {

@@ -119,7 +119,7 @@ public class JwtUtil {
         tokenInfo.put("accessToken", accessToken);
         tokenInfo.put("refreshToken", refreshToken);
         tokenInfo.put("tokenType", "Bearer");
-        tokenInfo.put("expiresIn", accessTokenValidityInMilliseconds / 1000000); // 초 단위
+        tokenInfo.put("expiresIn", accessTokenValidityInMilliseconds / 1000); // 초 단위
 
         return tokenInfo;
     }
