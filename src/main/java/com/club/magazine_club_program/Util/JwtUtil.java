@@ -82,15 +82,17 @@ public class JwtUtil {
      * Refresh Token 생성
      * @param memberId 회원 ID
      * @param email 이메일
+     * @param name 이름 (Access Token 갱신 시 필요)
      * @return JWT Refresh Token
      */
-    public String generateRefreshToken(Integer memberId, String email) {
+    public String generateRefreshToken(Integer memberId, String email, String name) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + refreshTokenValidityInMilliseconds);
 
         Map<String, Object> claims = new HashMap<>();
         claims.put("memberId", memberId);
         claims.put("email", email);
+        claims.put("name", name);
         claims.put("type", "refresh");
 
         return Jwts.builder()
@@ -111,13 +113,13 @@ public class JwtUtil {
      */
     public Map<String, Object> generateTokenPair(Integer memberId, String email, String name) {
         String accessToken = generateAccessToken(memberId, email, name);
-        String refreshToken = generateRefreshToken(memberId, email);
+        String refreshToken = generateRefreshToken(memberId, email, name);
 
         Map<String, Object> tokenInfo = new HashMap<>();
         tokenInfo.put("accessToken", accessToken);
         tokenInfo.put("refreshToken", refreshToken);
         tokenInfo.put("tokenType", "Bearer");
-        tokenInfo.put("expiresIn", accessTokenValidityInMilliseconds / 1000); // 초 단위
+        tokenInfo.put("expiresIn", accessTokenValidityInMilliseconds / 1000000); // 초 단위
 
         return tokenInfo;
     }

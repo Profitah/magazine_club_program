@@ -11,6 +11,7 @@ import org.springframework.security.oauth2.client.web.HttpSessionOAuth2Authoriza
 import org.springframework.security.oauth2.client.web.AuthorizationRequestRepository;
 import org.springframework.security.oauth2.core.endpoint.OAuth2AuthorizationRequest;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.core.session.SessionRegistry;
@@ -29,6 +30,9 @@ public class SecurityConfig {
     
     @Autowired(required = false)
     private CustomOAuth2AuthenticationSuccessHandler customOAuth2AuthenticationSuccessHandler;
+    
+    @Autowired(required = false)
+    private JwtAuthenticationFilter jwtAuthenticationFilter;
 
     public SecurityConfig() {
     }
@@ -40,12 +44,22 @@ public class SecurityConfig {
         
         return http
                 .csrf(AbstractHttpConfigurer::disable)
+                // JWT 인증 필터 추가 (자동 토큰 갱신)
+                .addFilterBefore(jwtAuthenticationFilter != null 
+                        ? jwtAuthenticationFilter 
+                        : new org.springframework.web.filter.OncePerRequestFilter() {
+                            @Override
+                            protected void doFilterInternal(jakarta.servlet.http.HttpServletRequest request, jakarta.servlet.http.HttpServletResponse response, jakarta.servlet.FilterChain filterChain) throws jakarta.servlet.ServletException, java.io.IOException {
+                                filterChain.doFilter(request, response);
+                            }
+                        }, UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(new AntPathRequestMatcher("/admin/setup-authenticator")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/admin/verify-authenticator")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/admin/verify-for-chat")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/admin/logout")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/auth/logout")).permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/auth/refresh")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/logout")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/login/kakao/**")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/login/google/**")).permitAll()
