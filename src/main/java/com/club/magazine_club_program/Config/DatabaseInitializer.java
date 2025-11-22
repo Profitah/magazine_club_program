@@ -100,6 +100,50 @@ public class DatabaseInitializer implements CommandLineRunner {
             """);
             System.out.println("AssignmentSubmission 테이블 확인/생성 완료");
             
+            jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS ProfanityWord (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    word VARCHAR(100) NOT NULL UNIQUE,
+                    is_active BOOLEAN DEFAULT TRUE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    INDEX idx_word (word),
+                    INDEX idx_is_active (is_active)
+                )
+            """);
+            System.out.println("ProfanityWord 테이블 확인/생성 완료");
+            
+            jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS UserViolation (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    user_type VARCHAR(20) NOT NULL,
+                    violation_count INT DEFAULT 0,
+                    last_violation_at TIMESTAMP NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_user_violation (user_id, user_type),
+                    INDEX idx_user_id (user_id),
+                    INDEX idx_user_type (user_type)
+                )
+            """);
+            System.out.println("UserViolation 테이블 확인/생성 완료");
+            
+            jdbcTemplate.execute("""
+                CREATE TABLE IF NOT EXISTS BlockedUser (
+                    id INT AUTO_INCREMENT PRIMARY KEY,
+                    user_id INT NOT NULL,
+                    user_type VARCHAR(20) NOT NULL,
+                    blocked_until TIMESTAMP NOT NULL,
+                    reason VARCHAR(255),
+                    violation_count INT DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE KEY unique_blocked_user (user_id, user_type),
+                    INDEX idx_user_id (user_id),
+                    INDEX idx_user_type (user_type),
+                    INDEX idx_blocked_until (blocked_until)
+                )
+            """);
+            System.out.println("BlockedUser 테이블 확인/생성 완료");
+            
         } catch (Exception e) {
             System.err.println("데이터베이스 초기화 실패: " + e.getMessage());
             e.printStackTrace();

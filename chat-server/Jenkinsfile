@@ -1,0 +1,571 @@
+pipeline {
+    agent any
+    
+    parameters {
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['staging', 'production'],
+            description: '배포 환경 선택'
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: '테스트 건너뛰기'
+        )
+        booleanParam(
+            name: 'SEND_NOTIFICATION',
+            defaultValue: true,
+            description: '알림 전송'
+        )
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Node.js 설정') {
+            steps {
+                script {
+                    sh '''
+                        cd chat-server
+                        if [ ! -d "node_modules" ]; then
+                            echo "📦 Node.js 의존성 설치 중..."
+                            npm install
+                        fi
+                    '''
+                }
+            }
+        }
+        
+        stage('금칙어 목록 검증') {
+            steps {
+                script {
+                    sh '''
+                        cd chat-server
+                        
+                        if [ ! -f "profanity-words.txt" ]; then
+                            echo "❌ profanity-words.txt 파일이 없습니다."
+                            exit 1
+                        fi
+                        
+                        echo "🔍 금칙어 목록 검증 중..."
+                        
+                        node -e "
+                        const fs = require('fs');
+                        
+                        const content = fs.readFileSync('profanity-words.txt', 'utf-8');
+                        const words = content
+                            .split('\\n')
+                            .map(line => line.trim())
+                            .filter(line => line && !line.startsWith('#'));
+                        
+                        // 중복 검사
+                        const wordMap = new Map();
+                        const duplicates = [];
+                        words.forEach(word => {
+                            const lower = word.toLowerCase();
+                            if (wordMap.has(lower)) {
+                                duplicates.push(word);
+                            } else {
+                                wordMap.set(lower, word);
+                            }
+                        });
+                        
+                        if (duplicates.length > 0) {
+                            console.error('❌ 중복된 금칙어 발견:', duplicates.join(', '));
+                            process.exit(1);
+                        }
+                        
+                        // 빈 값 검사
+                        const emptyWords = words.filter(w => w.length === 0);
+                        if (emptyWords.length > 0) {
+                            console.error('❌ 빈 금칙어가 있습니다.');
+                            process.exit(1);
+                        }
+                        
+                        // 길이 검사
+                        const invalidWords = words.filter(w => {
+                            return w.length < 2 || w.length > 50;
+                        });
+                        
+                        if (invalidWords.length > 0) {
+                            console.error('❌ 잘못된 길이의 금칙어:', invalidWords.join(', '));
+                            process.exit(1);
+                        }
+                        
+                        console.log('✅ 금칙어 목록 검증 완료:', words.length + '개');
+                        "
+                    '''
+                }
+            }
+        }
+        
+        stage('변경 사항 분석') {
+            steps {
+                script {
+                    sh '''
+                        cd chat-server
+                        
+                        echo "📊 변경 사항 분석 중..."
+                        
+                        node -e "
+                        const fs = require('fs');
+                        const { execSync } = require('child_process');
+                        
+                        try {
+                            // 이전 버전과 비교
+                            const oldContent = execSync('git show HEAD~1:chat-server/profanity-words.txt 2>/dev/null || echo ""', { encoding: 'utf-8' });
+                            const oldWords = oldContent
+                                .split('\\n')
+                                .map(line => line.trim())
+                                .filter(line => line && !line.startsWith('#'));
+                            
+                            const newContent = fs.readFileSync('profanity-words.txt', 'utf-8');
+                            const newWords = newContent
+                                .split('\\n')
+                                .map(line => line.trim())
+                                .filter(line => line && !line.startsWith('#'));
+                            
+                            const oldSet = new Set(oldWords.map(w => w.toLowerCase()));
+                            const newSet = new Set(newWords.map(w => w.toLowerCase()));
+                            
+                            const added = newWords.filter(w => !oldSet.has(w.toLowerCase()));
+                            const removed = oldWords.filter(w => !newSet.has(w.toLowerCase()));
+                            
+                            console.log('📈 추가된 금칙어:', added.length + '개');
+                            if (added.length > 0) {
+                                added.forEach(w => console.log('  + ' + w));
+                            }
+                            
+                            console.log('📉 제거된 금칙어:', removed.length + '개');
+                            if (removed.length > 0) {
+                                removed.forEach(w => console.log('  - ' + w));
+                            }
+                            
+                            console.log('📊 총 금칙어 개수:', newWords.length + '개 (이전: ' + oldWords.length + '개)');
+                        } catch (error) {
+                            console.log('⚠️ 이전 버전 비교 실패 (첫 배포일 수 있음)');
+                        }
+                        "
+                    '''
+                }
+            }
+        }
+        
+        stage('성능 테스트') {
+            when { expression { !params.SKIP_TESTS } }
+            steps {
+                script {
+                    sh '''
+                        cd chat-server
+                        
+                        echo "⚡ 성능 테스트 중..."
+                        
+                        node -e "
+                        const fs = require('fs');
+                        
+                        const content = fs.readFileSync('profanity-words.txt', 'utf-8');
+                        const words = content
+                            .split('\\n')
+                            .map(line => line.trim())
+                            .filter(line => line && !line.startsWith('#'))
+                            .map(w => w.toLowerCase());
+                        
+                        // 테스트 메시지 생성
+                        const testMessages = [
+                            '안녕하세요',
+                            '테스트 메시지입니다',
+                            '금칙어가 포함된 메시지',
+                            '일반적인 대화 내용',
+                            '긴 메시지 테스트 ' + 'a'.repeat(100)
+                        ];
+                        
+                        const startTime = Date.now();
+                        let checkCount = 0;
+                        
+                        // 성능 테스트
+                        for (let i = 0; i < 1000; i++) {
+                            testMessages.forEach(message => {
+                                words.forEach(word => {
+                                    if (message.toLowerCase().includes(word)) {
+                                        checkCount++;
+                                    }
+                                });
+                            });
+                        }
+                        
+                        const duration = Date.now() - startTime;
+                        const avgTime = duration / (testMessages.length * 1000);
+                        
+                        console.log('⚡ 성능 테스트 결과:');
+                        console.log('  - 총 검사 횟수:', checkCount);
+                        console.log('  - 총 소요 시간:', duration + 'ms');
+                        console.log('  - 평균 검사 시간:', avgTime.toFixed(3) + 'ms');
+                        
+                        if (duration > 1000) {
+                            console.warn('⚠️ 성능 저하 가능성: ' + duration + 'ms');
+                        } else {
+                            console.log('✅ 성능 테스트 통과');
+                        }
+                        "
+                    '''
+                }
+            }
+        }
+        
+        stage('통계 생성') {
+            steps {
+                script {
+                    sh '''
+                        cd chat-server
+                        
+                        echo "📊 통계 생성 중..."
+                        
+                        node -e "
+                        const fs = require('fs');
+                        
+                        const content = fs.readFileSync('profanity-words.txt', 'utf-8');
+                        const words = content
+                            .split('\\n')
+                            .map(line => line.trim())
+                            .filter(line => line && !line.startsWith('#'));
+                        
+                        const lengths = words.map(w => w.length);
+                        const stats = {
+                            totalWords: words.length,
+                            avgLength: lengths.reduce((a, b) => a + b, 0) / lengths.length || 0,
+                            maxLength: Math.max(...lengths, 0),
+                            minLength: Math.min(...lengths, 0),
+                            timestamp: new Date().toISOString()
+                        };
+                        
+                        console.log('📊 금칙어 통계:');
+                        console.log('  - 총 개수:', stats.totalWords);
+                        console.log('  - 평균 길이:', stats.avgLength.toFixed(2));
+                        console.log('  - 최대 길이:', stats.maxLength);
+                        console.log('  - 최소 길이:', stats.minLength);
+                        
+                        // JSON 파일로 저장
+                        fs.writeFileSync('profanity-stats.json', JSON.stringify(stats, null, 2));
+                        "
+                    '''
+                }
+            }
+        }
+        
+        stage('DB 동기화') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'db-host', variable: 'DB_HOST'),
+                    string(credentialsId: 'db-port', variable: 'DB_PORT'),
+                    usernamePassword(credentialsId: 'db-user', usernameVariable: 'DB_USER', passwordVariable: 'DB_USER_PASSWORD'),
+                    usernamePassword(credentialsId: 'db-password', usernameVariable: 'DB_PASSWORD_USERNAME', passwordVariable: 'DB_PASSWORD'),
+                    usernamePassword(credentialsId: 'db-name', usernameVariable: 'DB_NAME_USERNAME', passwordVariable: 'DB_NAME')
+                ]) {
+                    script {
+                        sh '''
+                        cd chat-server
+                        
+                        echo "🔄 DB 동기화 중..."
+                        
+                        node -e "
+                        const fs = require('fs');
+                        const mysql = require('mysql2/promise');
+                        
+                        (async () => {
+                            try {
+                                // 파일에서 금칙어 읽기
+                                const content = fs.readFileSync('profanity-words.txt', 'utf-8');
+                                const words = content
+                                    .split('\\n')
+                                    .map(line => line.trim())
+                                    .filter(line => line && !line.startsWith('#'));
+                                
+                                console.log('📝 파일에서 읽은 금칙어:', words.length + '개');
+                                
+                                if (words.length === 0) {
+                                    console.log('⚠️ 금칙어가 없습니다.');
+                                    return;
+                                }
+                                
+                                // DB 연결
+                                const connection = await mysql.createConnection({
+                                    host: process.env.DB_HOST,
+                                    port: parseInt(process.env.DB_PORT),
+                                    user: process.env.DB_USER,
+                                    password: process.env.DB_PASSWORD,
+                                    database: process.env.DB_NAME
+                                });
+                                
+                                // DB의 모든 활성 금칙어 조회
+                                const [dbRows] = await connection.execute(
+                                    'SELECT word FROM ProfanityWord WHERE is_active = TRUE'
+                                );
+                                const dbWords = new Set(dbRows.map(row => row.word.toLowerCase()));
+                                const fileWordsSet = new Set(words.map(word => word.toLowerCase()));
+                                
+                                // 파일에 있지만 DB에 없는 금칙어 추가
+                                let added = 0;
+                                for (const word of fileWordsSet) {
+                                    if (!dbWords.has(word)) {
+                                        await connection.execute(
+                                            'INSERT INTO ProfanityWord (word, is_active) VALUES (?, TRUE) ON DUPLICATE KEY UPDATE is_active = TRUE',
+                                            [word]
+                                        );
+                                        console.log('➕ 금칙어 추가: ' + word);
+                                        added++;
+                                    }
+                                }
+                                
+                                // DB에 있지만 파일에 없는 금칙어 비활성화
+                                let removed = 0;
+                                for (const word of dbWords) {
+                                    if (!fileWordsSet.has(word)) {
+                                        await connection.execute(
+                                            'UPDATE ProfanityWord SET is_active = FALSE WHERE word = ?',
+                                            [word]
+                                        );
+                                        console.log('➖ 금칙어 비활성화: ' + word);
+                                        removed++;
+                                    }
+                                }
+                                
+                                await connection.end();
+                                console.log('✅ 금칙어 목록 동기화 완료 (추가: ' + added + ', 비활성화: ' + removed + ')');
+                            } catch (error) {
+                                console.error('❌ 동기화 실패:', error.message);
+                                process.exit(1);
+                            }
+                        })();
+                        "
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('금칙어 목록 확인') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'db-host', variable: 'DB_HOST'),
+                    string(credentialsId: 'db-port', variable: 'DB_PORT'),
+                    usernamePassword(credentialsId: 'db-user', usernameVariable: 'DB_USER', passwordVariable: 'DB_USER_PASSWORD'),
+                    usernamePassword(credentialsId: 'db-password', usernameVariable: 'DB_PASSWORD_USERNAME', passwordVariable: 'DB_PASSWORD'),
+                    usernamePassword(credentialsId: 'db-name', usernameVariable: 'DB_NAME_USERNAME', passwordVariable: 'DB_NAME')
+                ]) {
+                    script {
+                        sh '''
+                        cd chat-server
+                        
+                        node -e "
+                        const mysql = require('mysql2/promise');
+                        
+                        (async () => {
+                            try {
+                                const connection = await mysql.createConnection({
+                                    host: process.env.DB_HOST,
+                                    port: parseInt(process.env.DB_PORT),
+                                    user: process.env.DB_USER,
+                                    password: process.env.DB_PASSWORD,
+                                    database: process.env.DB_NAME
+                                });
+                                
+                                const [rows] = await connection.execute(
+                                    'SELECT COUNT(*) as count FROM ProfanityWord WHERE is_active = TRUE'
+                                );
+                                console.log('📊 현재 활성화된 금칙어 개수:', rows[0].count);
+                                
+                                const [words] = await connection.execute(
+                                    'SELECT word FROM ProfanityWord WHERE is_active = TRUE ORDER BY word LIMIT 10'
+                                );
+                                console.log('📋 금칙어 목록 (최대 10개):');
+                                words.forEach(row => console.log('  - ' + row.word));
+                                
+                                await connection.end();
+                            } catch (error) {
+                                console.error('❌ 확인 실패:', error.message);
+                                process.exit(1);
+                            }
+                        })();
+                        "
+                        '''
+                    }
+                }
+            }
+        }
+        
+        stage('차단 검토 및 통계') {
+            steps {
+                withCredentials([
+                    string(credentialsId: 'db-host', variable: 'DB_HOST'),
+                    string(credentialsId: 'db-port', variable: 'DB_PORT'),
+                    usernamePassword(credentialsId: 'db-user', usernameVariable: 'DB_USER', passwordVariable: 'DB_USER_PASSWORD'),
+                    usernamePassword(credentialsId: 'db-password', usernameVariable: 'DB_PASSWORD_USERNAME', passwordVariable: 'DB_PASSWORD'),
+                    usernamePassword(credentialsId: 'db-name', usernameVariable: 'DB_NAME_USERNAME', passwordVariable: 'DB_NAME')
+                ]) {
+                    script {
+                        sh '''
+                        cd chat-server
+                        
+                        echo "🔍 차단 검토 및 통계 생성 중..."
+                        
+                        node -e "
+                        const mysql = require('mysql2/promise');
+                        
+                        (async () => {
+                            try {
+                                const connection = await mysql.createConnection({
+                                    host: process.env.DB_HOST,
+                                    port: parseInt(process.env.DB_PORT),
+                                    user: process.env.DB_USER,
+                                    password: process.env.DB_PASSWORD,
+                                    database: process.env.DB_NAME
+                                });
+                                
+                                // 현재 차단된 사용자 조회 (자동 해제 없음: blocked_until 조건 제거)
+                                const [blocked] = await connection.execute(
+                                    'SELECT user_id, user_type, violation_count, reason, blocked_until, created_at FROM BlockedUser ORDER BY created_at DESC'
+                                );
+                                
+                                console.log('📊 현재 차단된 사용자:', blocked.length + '명');
+                                
+                                // 최근 차단된 사용자 (24시간 이내)
+                                const [recentBlocked] = await connection.execute(
+                                    'SELECT COUNT(*) as count FROM BlockedUser WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)'
+                                );
+                                
+                                console.log('📈 최근 24시간 차단:', recentBlocked[0].count + '명');
+                                
+                                // 위반 기록 통계
+                                const [violations] = await connection.execute(
+                                    'SELECT COUNT(*) as total, SUM(CASE WHEN violation_count >= 2 THEN 1 ELSE 0 END) as needReview, AVG(violation_count) as avgViolations, MAX(violation_count) as maxViolations FROM UserViolation'
+                                );
+                                
+                                console.log('📊 위반 기록 통계:');
+                                console.log('  - 총 위반 기록:', violations[0].total + '건');
+                                console.log('  - 검토 필요:', violations[0].needReview + '건');
+                                console.log('  - 평균 위반 횟수:', parseFloat(violations[0].avgViolations || 0).toFixed(2));
+                                console.log('  - 최대 위반 횟수:', violations[0].maxViolations || 0);
+                                
+                                // 자동 해제 기능 제거됨 - 수동 해제만 가능
+                                console.log('ℹ️  자동 해제 기능이 제거되었습니다. 수동 해제만 가능합니다.');
+                                
+                                // 자동 영구 차단: 채팅 차단된 회원을 자바 서버의 BannedEmail 테이블에 추가
+                                const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'jenkins@system';
+                                
+                                let autoBannedCount = 0;
+                                for (const blockedUser of blocked) {
+                                    if (blockedUser.user_type === 'member' && blockedUser.user_id) {
+                                        try {
+                                            // 회원 정보 조회 (이메일 가져오기)
+                                            const [members] = await connection.execute(
+                                                'SELECT email FROM MemberInfo WHERE id = ?',
+                                                [blockedUser.user_id]
+                                            );
+                                            
+                                            if (members.length > 0 && members[0].email) {
+                                                const email = members[0].email.toLowerCase();
+                                                
+                                                // 이미 영구 차단되었는지 확인
+                                                const [banned] = await connection.execute(
+                                                    'SELECT id FROM BannedEmail WHERE email = ?',
+                                                    [email]
+                                                );
+                                                
+                                                if (banned.length === 0) {
+                                                    // BannedEmail 테이블에 직접 추가 (같은 DB 사용)
+                                                    const reason = 'Jenkins 자동 영구 차단: ' + (blockedUser.reason || '금칙어 사용');
+                                                    await connection.execute(
+                                                        'INSERT INTO BannedEmail (email, reason, member_id, banned_by, ban_type, banned_at) VALUES (?, ?, ?, ?, ?, NOW())',
+                                                        [email, reason, blockedUser.user_id, ADMIN_EMAIL, 'PERMANENT_BAN']
+                                                    );
+                                                    console.log('✅ 자동 영구 차단 완료: userId=' + blockedUser.user_id + ', email=' + email);
+                                                    autoBannedCount++;
+                                                }
+                                            }
+                                        } catch (error) {
+                                            // 중복 키 오류는 무시 (이미 차단된 경우)
+                                            if (error.code !== 'ER_DUP_ENTRY') {
+                                                console.warn('⚠️  자동 영구 차단 처리 중 오류 (무시): userId=' + blockedUser.user_id + ', error=' + error.message);
+                                            }
+                                        }
+                                    }
+                                }
+                                
+                                if (autoBannedCount > 0) {
+                                    console.log('📊 자동 영구 차단 완료: ' + autoBannedCount + '명');
+                                } else {
+                                    console.log('ℹ️  자동 영구 차단할 새로운 차단 사용자 없음');
+                                }
+                                
+                                // 오탐지 가능성 검토 (서버 자동 차단 후 1시간 이내 차단된 경우)
+                                const falsePositiveReason = '%서버 자동 차단%';
+                                const [falsePositives] = await connection.execute(
+                                    'SELECT COUNT(*) as count FROM BlockedUser WHERE reason LIKE ? AND TIMESTAMPDIFF(HOUR, created_at, NOW()) <= 1',
+                                    [falsePositiveReason]
+                                );
+                                
+                                if (falsePositives[0].count > 0) {
+                                    console.log('⚠️ 오탐지 가능성:', falsePositives[0].count + '건 (1시간 이내 차단)');
+                                }
+                                
+                                await connection.end();
+                                console.log('✅ 차단 검토 및 통계 생성 완료');
+                            } catch (error) {
+                                console.error('❌ 검토 실패:', error.message);
+                                process.exit(1);
+                            }
+                        })();
+                        "
+                        '''
+                    }
+                }
+            }
+        }
+        
+    }
+    
+    post {
+        always {
+            script {
+                try {
+                    // 파일이 존재할 때만 아카이브 시도
+                    def statsFile = fileExists('chat-server/profanity-stats.json')
+                    if (statsFile) {
+                        archiveArtifacts artifacts: 'chat-server/profanity-stats.json', allowEmptyArchive: true, fingerprint: true
+                    }
+                } catch (Exception e) {
+                    echo "⚠️  아티팩트 아카이브 실패 (무시): ${e.message}"
+                }
+            }
+        }
+        success {
+            script {
+                if (params.SEND_NOTIFICATION) {
+                    echo "✅ 파이프라인 성공 - 알림 전송"
+                    // Slack 알림 예시 (설정 필요)
+                    // slackSend(
+                    //     channel: '#profanity-filter',
+                    //     color: 'good',
+                    //     message: "금칙어 목록이 성공적으로 업데이트되었습니다. (환경: ${params.ENVIRONMENT})"
+                    // )
+                } else {
+                    echo "✅ 파이프라인 성공"
+                }
+            }
+        }
+        failure {
+            script {
+                if (params.SEND_NOTIFICATION) {
+                    echo "❌ 파이프라인 실패 - 알림 전송"
+                    
+                } else {
+                    echo "❌ 파이프라인 실패"
+                }
+            }
+        }
+    }
+}

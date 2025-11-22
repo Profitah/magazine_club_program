@@ -1,10 +1,13 @@
 package com.club.magazine_club_program.DTO;
 
+import java.time.LocalDateTime;
+
 public class MemberDTO {
     private int id;
     private String name;
     private String snsLink;        
     private String email;
+    private LocalDateTime suspendedUntil; // 회원 자격 일시정지 해제 시간 (null이면 정상)
 
     public MemberDTO() {}
 
@@ -54,5 +57,23 @@ public class MemberDTO {
 
     public void setEmail(String email) {
         this.email = email;
+    }
+
+    public LocalDateTime getSuspendedUntil() {
+        return suspendedUntil;
+    }
+
+    public void setSuspendedUntil(LocalDateTime suspendedUntil) {
+        this.suspendedUntil = suspendedUntil;
+    }
+
+    /**
+     * 회원 자격이 일시정지되어 있는지 확인
+     */
+    public boolean isSuspended() {
+        if (suspendedUntil == null) {
+            return false;
+        }
+        return suspendedUntil.isAfter(java.time.LocalDateTime.now());
     }
 }

@@ -14,7 +14,7 @@ import com.club.magazine_club_program.DTO.MemberDTO;
 public interface MemberInfoMapper {
     // 전체 멤버 조회 
     @Select("""
-        SELECT id, name, sns_link, email
+        SELECT id, name, sns_link, email, suspended_until as suspendedUntil
         FROM MemberInfo
         ORDER BY id
     """)
@@ -84,4 +84,28 @@ public interface MemberInfoMapper {
         WHERE id = #{id}
     """)
     int updateMember(MemberDTO member);
+
+    // 회원 자격 일시정지
+    @Update("""
+        UPDATE MemberInfo 
+        SET suspended_until = #{suspendedUntil}
+        WHERE id = #{id}
+    """)
+    int suspendMember(@Param("id") int id, @Param("suspendedUntil") java.time.LocalDateTime suspendedUntil);
+
+    // 회원 자격 일시정지 해제
+    @Update("""
+        UPDATE MemberInfo 
+        SET suspended_until = NULL
+        WHERE id = #{id}
+    """)
+    int unsuspendMember(@Param("id") int id);
+
+    // 만료된 일시정지 자동 해제
+    @Update("""
+        UPDATE MemberInfo 
+        SET suspended_until = NULL
+        WHERE suspended_until IS NOT NULL AND suspended_until <= NOW()
+    """)
+    int unsuspendExpiredMembers();
 }

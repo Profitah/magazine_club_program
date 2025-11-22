@@ -2,6 +2,8 @@ const { verifyAdminSession } = require('../services/authService');
 const { getAdminById, getMemberById } = require('../services/userService');
 const chatService = require('../services/chatService');
 const { enqueueNotification } = require('../queue/notificationQueue');
+const profanityFilterService = require('../services/profanityFilterService');
+const blockService = require('../services/blockService');
 
 function registerChatSocket(io, userSessions) {
   io.on('connection', (socket) => {
@@ -82,6 +84,57 @@ function registerChatSocket(io, userSessions) {
         if (!fromUserId || !toUserId || !fromUserType || !toUserType || !message) {
           socket.emit('error', { message: '필수 필드가 누락되었습니다.' });
           return;
+        }
+
+        // 1. 차단 상태 확인 (관리자는 제외)
+        if (fromUserType === 'member') {
+          const blockStatus = await blockService.isUserBlocked(fromUserId, fromUserType);
+          if (blockStatus.isBlocked) {
+            const blockUntil = new Date(blockStatus.blockUntil).toLocaleString('ko-KR');
+            socket.emit('error', { 
+              message: `채팅이 차단되었습니다. 차단 해제 시간: ${blockUntil}. 사유: ${blockStatus.reason}` 
+            });
+            return;
+          }
+        }
+
+        // 2. 금칙어 검사
+        const profanityCheck = profanityFilterService.checkProfanity(message);
+        if (profanityCheck.hasProfanity) {
+          // 금칙어 발견 시 위반 기록 및 즉시 차단 처리
+          if (fromUserType === 'member') {
+            const violationResult = await blockService.recordViolation(
+              fromUserId,
+              fromUserType,
+              profanityCheck.detectedWords
+            );
+
+            // 차단된 경우 메시지 전송 차단
+            if (violationResult.isBlocked) {
+              const blockUntil = new Date(violationResult.blockUntil).toLocaleString('ko-KR');
+              socket.emit('error', { 
+                message: `금칙어 사용으로 인해 채팅이 차단되었습니다. 차단 해제 시간: ${blockUntil}` 
+              });
+              return;
+            }
+
+            // 경고 메시지 전송 (차단되지 않은 경우)
+            socket.emit('warning', { 
+              message: `금칙어가 감지되었습니다. (위반 횟수: ${violationResult.violationCount}/2)`,
+              violationCount: violationResult.violationCount
+            });
+          }
+
+          // 금칙어를 마스킹한 메시지로 대체
+          const maskedMessage = profanityFilterService.maskProfanity(message);
+          
+          // 마스킹된 메시지로 계속 진행 (관리자는 경고만)
+          if (fromUserType === 'admin') {
+            console.log(`⚠️ 관리자 메시지에 금칙어 감지: ${profanityCheck.detectedWords.join(', ')}`);
+          }
+          
+          // 마스킹된 메시지 사용
+          data.message = maskedMessage;
         }
 
         let fromUserName;

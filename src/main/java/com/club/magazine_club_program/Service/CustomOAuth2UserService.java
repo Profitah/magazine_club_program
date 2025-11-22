@@ -3,6 +3,7 @@ package com.club.magazine_club_program.Service;
 import com.club.magazine_club_program.DTO.OAuth2UserInfo;
 import com.club.magazine_club_program.DTO.MemberDTO;
 import com.club.magazine_club_program.DTO.AdminDTO;
+import com.club.magazine_club_program.DTO.BannedEmailDTO;
 import com.club.magazine_club_program.Mapper.AdminMapper;
 import com.club.magazine_club_program.Service.OAuth2.OAuth2UserInfoExtractor;
 import org.slf4j.Logger;
@@ -30,14 +31,17 @@ public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
     private final MemberService memberService;
     private final AdminMapper adminMapper;
     private final List<OAuth2UserInfoExtractor> extractors;
+    private final BannedEmailService bannedEmailService;
 
     public CustomOAuth2UserService(
             MemberService memberService, 
             AdminMapper adminMapper,
-            List<OAuth2UserInfoExtractor> extractors) {
+            List<OAuth2UserInfoExtractor> extractors,
+            BannedEmailService bannedEmailService) {
         this.memberService = memberService;
         this.adminMapper = adminMapper;
         this.extractors = extractors;
+        this.bannedEmailService = bannedEmailService;
     }
 
     @Override
@@ -68,6 +72,20 @@ public class CustomOAuth2UserService implements OAuth2UserService<OAuth2UserRequ
         OAuth2UserInfo userInfo = extractUserInfo(registrationId, oAuth2User.getAttributes());
             log.info("OAuth2 로그인 시도: registrationId={}, email={}, nickname={}", 
                     registrationId, userInfo.getEmail(), userInfo.getNickname());
+
+        // 이메일 차단 확인 (로그인 정지)
+        if (userInfo.getEmail() != null && !userInfo.getEmail().isEmpty()) {
+            if (bannedEmailService.isEmailBanned(userInfo.getEmail())) {
+                BannedEmailDTO bannedInfo = bannedEmailService.getBannedInfo(userInfo.getEmail());
+                String banReason = bannedInfo != null && bannedInfo.getReason() != null 
+                        ? bannedInfo.getReason() 
+                        : "차단된 계정입니다.";
+                log.warn("차단된 이메일 로그인 시도 차단: email={}, reason={}", userInfo.getEmail(), banReason);
+                OAuth2Error oauth2Error = new OAuth2Error("account_banned", 
+                        "차단된 계정입니다. 사유: " + banReason, null);
+                throw new OAuth2AuthenticationException(oauth2Error);
+            }
+        }
 
         // 카카오 또는 구글 로그인인 경우 관리자 체크
         if ("kakao".equals(registrationId) || "google".equals(registrationId)) {

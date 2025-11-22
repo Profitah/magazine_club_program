@@ -1,0 +1,149 @@
+name: 금칙어 목록 자동 업데이트
+
+on:
+  # 금칙어 목록 파일 변경 시 자동 실행
+  push:
+    paths:
+      - 'chat-server/profanity-words.txt'
+  # 수동 실행
+  workflow_dispatch:
+  # 스케줄 실행 (매일 자정)
+  schedule:
+    - cron: '0 0 * * *'
+
+jobs:
+  update-profanity-words:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 코드 체크아웃
+        uses: actions/checkout@v3
+
+      - name: Node.js 설정
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+
+      - name: Node.js 의존성 설치
+        run: |
+          cd chat-server
+          npm install mysql2
+
+      - name: 금칙어 목록 파일에서 DB 동기화
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+        run: |
+          cd chat-server
+          
+          if [ ! -f "profanity-words.txt" ]; then
+            echo "⚠️ profanity-words.txt 파일이 없습니다."
+            exit 0
+          fi
+          
+          echo "📝 금칙어 목록 파일에서 읽기..."
+          
+          # Node.js 스크립트로 파일 읽기 및 DB 동기화
+          node -e "
+          const fs = require('fs');
+          const mysql = require('mysql2/promise');
+          
+          (async () => {
+            try {
+              // 파일에서 금칙어 읽기
+              const content = fs.readFileSync('profanity-words.txt', 'utf-8');
+              const words = content
+                .split('\n')
+                .map(line => line.trim())
+                .filter(line => line && !line.startsWith('#'));
+              
+              console.log('📝 파일에서 읽은 금칙어:', words.length + '개');
+              
+              if (words.length === 0) {
+                console.log('⚠️ 금칙어가 없습니다.');
+                return;
+              }
+              
+              // DB 연결
+              const connection = await mysql.createConnection({
+                host: process.env.DB_HOST,
+                port: parseInt(process.env.DB_PORT),
+                user: process.env.DB_USER,
+                password: process.env.DB_PASSWORD,
+                database: process.env.DB_NAME
+              });
+              
+              // DB의 모든 활성 금칙어 조회
+              const [dbRows] = await connection.execute(
+                'SELECT word FROM ProfanityWord WHERE is_active = TRUE'
+              );
+              const dbWords = new Set(dbRows.map(row => row.word.toLowerCase()));
+              const fileWordsSet = new Set(words.map(word => word.toLowerCase()));
+              
+              // 파일에 있지만 DB에 없는 금칙어 추가
+              let added = 0;
+              for (const word of fileWordsSet) {
+                if (!dbWords.has(word)) {
+                  await connection.execute(
+                    'INSERT INTO ProfanityWord (word, is_active) VALUES (?, TRUE) ON DUPLICATE KEY UPDATE is_active = TRUE',
+                    [word]
+                  );
+                  console.log('➕ 금칙어 추가: ' + word);
+                  added++;
+                }
+              }
+              
+              // DB에 있지만 파일에 없는 금칙어 비활성화
+              let removed = 0;
+              for (const word of dbWords) {
+                if (!fileWordsSet.has(word)) {
+                  await connection.execute(
+                    'UPDATE ProfanityWord SET is_active = FALSE WHERE word = ?',
+                    [word]
+                  );
+                  console.log('➖ 금칙어 비활성화: ' + word);
+                  removed++;
+                }
+              }
+              
+              await connection.end();
+              console.log('✅ 금칙어 목록 동기화 완료 (추가: ' + added + ', 비활성화: ' + removed + ')');
+            } catch (error) {
+              console.error('❌ 동기화 실패:', error.message);
+              process.exit(1);
+            }
+          })();
+          "
+
+      - name: 금칙어 목록 확인
+        env:
+          DB_HOST: ${{ secrets.DB_HOST }}
+          DB_PORT: ${{ secrets.DB_PORT }}
+          DB_USER: ${{ secrets.DB_USER }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+        run: |
+          node -e "
+          const mysql = require('mysql2/promise');
+          
+          (async () => {
+            const connection = await mysql.createConnection({
+              host: process.env.DB_HOST,
+              port: process.env.DB_PORT,
+              user: process.env.DB_USER,
+              password: process.env.DB_PASSWORD,
+              database: process.env.DB_NAME
+            });
+            
+            const [rows] = await connection.execute(
+              'SELECT COUNT(*) as count FROM ProfanityWord WHERE is_active = TRUE'
+            );
+            console.log('📊 현재 활성화된 금칙어 개수:', rows[0].count);
+            
+            await connection.end();
+          })();
+          "
+

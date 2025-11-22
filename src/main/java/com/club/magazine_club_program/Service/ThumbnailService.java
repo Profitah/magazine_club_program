@@ -31,14 +31,14 @@ public class ThumbnailService {
     @Autowired
     private InstagramGalleryMapper instagramGalleryMapper;
     
-    @Value("${python.service.url}")
+    @Value("${python.service.url:http://localhost:5000}")
     private String pythonServiceUrl;
     private static final int DEFAULT_PAGE_SIZE = 3;
     
-    @Value("${instagram.target.username}")
+    @Value("${instagram.target.username:}")
     private String targetInstagramUsername;
     
-    @Value("${instagram.source.username}")
+    @Value("${instagram.source.username:}")
     private String sourceInstagramUsername;
     
     /**
@@ -271,7 +271,9 @@ public class ThumbnailService {
     }
     
     private String convertUsername(String username) {
-        if (sourceInstagramUsername.equals(username)) {
+        if (sourceInstagramUsername != null && !sourceInstagramUsername.isEmpty() && 
+            targetInstagramUsername != null && !targetInstagramUsername.isEmpty() &&
+            sourceInstagramUsername.equals(username)) {
             return targetInstagramUsername;
         }
         return username; 
