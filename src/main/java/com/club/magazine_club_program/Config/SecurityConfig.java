@@ -45,6 +45,7 @@ public class SecurityConfig {
                         .requestMatchers(new AntPathRequestMatcher("/admin/verify-authenticator")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/admin/verify-for-chat")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/admin/logout")).permitAll()
+                        .requestMatchers(new AntPathRequestMatcher("/auth/logout")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/logout")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/login/kakao/**")).permitAll()
                         .requestMatchers(new AntPathRequestMatcher("/login/google/**")).permitAll()
