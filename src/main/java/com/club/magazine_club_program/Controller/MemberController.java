@@ -15,9 +15,13 @@ import java.util.ArrayList;
 public class MemberController {
 
     private final MemberService memberService;
+    private final com.club.magazine_club_program.Service.BannedEmailService bannedEmailService;
 
-    public MemberController(MemberService memberService) {
+    public MemberController(
+            MemberService memberService,
+            com.club.magazine_club_program.Service.BannedEmailService bannedEmailService) {
         this.memberService = memberService;
+        this.bannedEmailService = bannedEmailService;
     }
 
     // 전체 멤버 조회 
@@ -195,6 +199,20 @@ public class MemberController {
 
             String email = signupInfo.get(0);
             String snsLink = signupInfo.get(1);
+
+            // 이메일 차단 확인 (회원가입 방지)
+            if (email != null && !email.trim().isEmpty()) {
+                if (bannedEmailService.isEmailBanned(email)) {
+                    com.club.magazine_club_program.DTO.BannedEmailDTO bannedInfo = bannedEmailService.getBannedInfo(email);
+                    String banReason = bannedInfo != null && bannedInfo.getReason() != null 
+                            ? bannedInfo.getReason() 
+                            : "차단된 계정입니다.";
+                    Map<String, Object> errorResponse = new HashMap<>();
+                    errorResponse.put("success", false);
+                    errorResponse.put("message", "차단된 이메일로는 회원가입할 수 없습니다. 사유: " + banReason);
+                    return ResponseEntity.ok(errorResponse);
+                }
+            }
 
             // 이메일로 회원 조회
             MemberDTO member = memberService.findByEmail(email);

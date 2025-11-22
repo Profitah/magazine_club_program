@@ -1,0 +1,56 @@
+version: '3.8'
+
+services:
+  # MySQL 
+  mysql:
+    image: mysql:8.0
+    container_name: magazine_mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - magazine-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Jenkins
+  jenkins:
+    image: jenkins/jenkins:lts
+    container_name: jenkins
+    user: root
+    ports:
+      - "8081:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - ./chat-server:/workspace/chat-server:ro
+      - ./:/workspace/project:ro
+    environment:
+      - JENKINS_OPTS=--httpPort=8080 --prefix=
+      - JAVA_OPTS=-Xmx1024m -Xms512m
+    networks:
+      - magazine-network
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+volumes:
+  jenkins_home:
+    driver: local
+  mysql_data:
+    driver: local
+
+networks:
+  magazine-network:
+    driver: bridge

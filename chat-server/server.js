@@ -9,6 +9,7 @@ const chatRoutes = require('./src/routes/chatRoutes');
 const reminderRoutes = require('./src/routes/reminderRoutes');
 const messageReservationRoutes = require('./src/routes/messageReservationRoutes');
 const notificationRoutes = require('./src/routes/notificationRoutes');
+const profanityRoutes = require('./src/routes/profanityRoutes');
 const { registerChatSocket } = require('./src/sockets/chatSocket');
 const { startNotificationWorker, closeQueueConnections } = require('./src/queue/notificationQueue');
 const { startSchedulerWorker, stopSchedulerWorker } = require('./src/queue/schedulerWorker');
@@ -34,6 +35,7 @@ app.use('/api/chat', chatRoutes);
 app.use('/api/reminders', reminderRoutes);
 app.use('/api/messages', messageReservationRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/profanity', profanityRoutes);
 
 registerChatSocket(io, userSessions);
 
@@ -60,6 +62,8 @@ startSchedulerWorker({
     await dispatchReservedMessage(job, io, userSessions);
   },
 });
+
+// 자동 해제 기능 제거됨 - 수동 해제만 가능
 
 process.on('SIGINT', async () => {
   console.log('Shutting down Redis connections...');

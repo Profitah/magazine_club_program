@@ -20,6 +20,7 @@ public class AuthenticatorConfig {
     public GoogleAuthenticator googleAuthenticator() {
         GoogleAuthenticator googleAuthenticator = new GoogleAuthenticator();
         googleAuthenticator.setCredentialRepository(new SimpleCredentialRepository());
+        // 시간 윈도우는 라이브러리 기본값 사용 (일반적으로 ±1.5분 허용)
         return googleAuthenticator;
     }
 

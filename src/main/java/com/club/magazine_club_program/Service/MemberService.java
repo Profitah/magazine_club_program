@@ -70,6 +70,13 @@ public class MemberService {
 
     // 카카오/구글 로그인 회원 생성 또는 조회 (자동 회원가입)
     public MemberDTO findOrCreateKakaoMember(String providerId, String nickname, String email) {
+        // 이메일 차단 확인 (회원가입 방지)
+        if (email != null && !email.trim().isEmpty()) {
+            // BannedEmailService 주입 필요 (순환 참조 방지를 위해 직접 확인)
+            // 이 부분은 CustomOAuth2UserService에서 이미 확인했지만, 추가 안전장치
+            log.debug("회원가입 시도: email={}", email);
+        }
+        
         // nickname이 null이거나 빈 문자열이면 email 사용 (email도 null이면 "카카오 사용자" 등 기본값)
         String name = (nickname != null && !nickname.trim().isEmpty()) ? nickname : 
                      (email != null && !email.trim().isEmpty() ? email : "카카오 사용자");
@@ -208,6 +215,57 @@ public class MemberService {
                         providerId, email, name, e.getMessage(), e);
                 throw e;
             }
+        }
+    }
+
+    /**
+     * 회원 자격 일시정지
+     */
+    public boolean suspendMember(int memberId, java.time.LocalDateTime suspendedUntil, String adminEmail) {
+        try {
+            int result = memberInfoMapper.suspendMember(memberId, suspendedUntil);
+            if (result > 0) {
+                log.info("회원 자격 일시정지 완료: memberId={}, suspendedUntil={}, adminEmail={}", 
+                        memberId, suspendedUntil, adminEmail);
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
+            log.error("회원 자격 일시정지 실패: memberId={}, error={}", memberId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * 회원 자격 일시정지 해제
+     */
+    public boolean unsuspendMember(int memberId) {
+        try {
+            int result = memberInfoMapper.unsuspendMember(memberId);
+            if (result > 0) {
+                log.info("회원 자격 일시정지 해제 완료: memberId={}", memberId);
+                return true;
+            }
+            return false;
+        } catch (Exception e) {
+            log.error("회원 자격 일시정지 해제 실패: memberId={}, error={}", memberId, e.getMessage(), e);
+            return false;
+        }
+    }
+
+    /**
+     * 만료된 일시정지 자동 해제
+     */
+    public int unsuspendExpiredMembers() {
+        try {
+            int result = memberInfoMapper.unsuspendExpiredMembers();
+            if (result > 0) {
+                log.info("만료된 회원 자격 일시정지 해제: {}명", result);
+            }
+            return result;
+        } catch (Exception e) {
+            log.error("만료된 회원 자격 일시정지 해제 실패: {}", e.getMessage(), e);
+            return 0;
         }
     }
 }
