@@ -1,6 +1,7 @@
 package com.club.magazine_club_program.Service;
 
 import com.club.magazine_club_program.DTO.MemberDTO;
+import com.club.magazine_club_program.Util.JwtUtil;
 import jakarta.servlet.http.HttpSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,15 +13,18 @@ import java.util.Map;
 
 /**
  * 카카오 로그인 서비스
+ * 일반 사용자 로그인 시 JWT 토큰 발급
  */
 @Service
 public class KakaoLoginService implements OAuth2LoginService {
 
     private static final Logger log = LoggerFactory.getLogger(KakaoLoginService.class);
     private final MemberService memberService;
+    private final JwtUtil jwtUtil;
 
-    public KakaoLoginService(MemberService memberService) {
+    public KakaoLoginService(MemberService memberService, JwtUtil jwtUtil) {
         this.memberService = memberService;
+        this.jwtUtil = jwtUtil;
     }
 
     @Override
@@ -86,6 +90,18 @@ public class KakaoLoginService implements OAuth2LoginService {
             response.put("user", userInfo);
             response.put("needsAdditionalInfo", needsAdditionalInfo);
             response.put("isRegistrationComplete", !needsAdditionalInfo);
+            
+            // JWT 토큰 발급 (일반 사용자용)
+            if (memberId != null && email != null && memberName != null) {
+                try {
+                    Map<String, Object> tokenInfo = jwtUtil.generateTokenPair(memberId, email, memberName);
+                    response.put("token", tokenInfo);
+                    log.info("카카오 로그인 JWT 토큰 발급 완료: memberId={}, email={}", memberId, email);
+                } catch (Exception e) {
+                    log.error("카카오 로그인 JWT 토큰 발급 실패: memberId={}, error={}", memberId, e.getMessage(), e);
+                    // 토큰 발급 실패해도 로그인은 성공으로 처리
+                }
+            }
             
             log.info("카카오 로그인 성공: memberId={}, name={}, email={}, needsAdditionalInfo={}", 
                     memberId, memberName, email, needsAdditionalInfo);
